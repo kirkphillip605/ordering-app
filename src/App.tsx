@@ -7,6 +7,7 @@ import { ListsTab } from './components/ListsTab';
 import { ProductsTab } from './components/ProductsTab';
 import { VendorsTab } from './components/VendorsTab';
 import { UnitsTab } from './components/UnitsTab';
+import { UsersTab } from './components/UsersTab';
 import { ListEditScreen } from './components/ListEditScreen';
 import { ToastContainer } from './components/Toast';
 
@@ -14,7 +15,7 @@ export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(null);
   
-  const [activeTab, setActiveTab] = useState<'lists' | 'products' | 'vendors' | 'units'>('lists');
+  const [activeTab, setActiveTab] = useState<'lists' | 'products' | 'vendors' | 'units' | 'users'>('lists');
   const [activeListId, setActiveListId] = useState<string | null>(null);
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -98,16 +99,18 @@ export default function App() {
               {activeTab === 'products' && <ProductsTab token={token} products={products} vendors={vendors} fetchProducts={fetchProducts} fetchVendors={fetchVendors} />}
               {activeTab === 'vendors' && <VendorsTab token={token} vendors={vendors} fetchVendors={fetchVendors} />}
               {activeTab === 'units' && <UnitsTab token={token} units={units} fetchUnits={fetchUnits} />}
+              {activeTab === 'users' && user?.role === 'admin' && <UsersTab token={token} />}
             </div>
           </IonContent>
 
           <div className="fixed bottom-0 left-0 right-0 bg-gray-900/90 backdrop-blur-md border-t border-gray-800/60 px-4 py-2 flex justify-around items-center z-50 safe-area-bottom">
             {[
-              { id: 'lists', icon: clipboardOutline, label: 'Lists' },
-              { id: 'products', icon: cubeOutline, label: 'Products' },
-              { id: 'vendors', icon: businessOutline, label: 'Vendors' },
-              { id: 'units', icon: optionsOutline, label: 'Units' },
-            ].map(tab => (
+              { id: 'lists', icon: clipboardOutline, label: 'Lists', show: true },
+              { id: 'products', icon: cubeOutline, label: 'Products', show: true },
+              { id: 'vendors', icon: businessOutline, label: 'Vendors', show: true },
+              { id: 'units', icon: optionsOutline, label: 'Units', show: true },
+              { id: 'users', icon: optionsOutline, label: 'Users', show: user?.role === 'admin' }
+            ].filter(t => t.show).map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all-200 ${activeTab === tab.id ? 'text-teal-400 font-bold' : 'text-gray-500 hover:text-gray-300'}`}>
                 <IonIcon icon={tab.icon} className="text-lg" />
                 <span className="text-[9px] uppercase tracking-wider font-semibold">{tab.label}</span>

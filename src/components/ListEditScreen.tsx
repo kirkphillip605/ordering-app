@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { IonContent, IonIcon, IonModal } from '@ionic/react';
-import { closeOutline, checkmarkCircleOutline, trashOutline, searchOutline, scanOutline, addOutline, cubeOutline } from 'ionicons/icons';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { closeOutline, checkmarkCircleOutline, trashOutline, searchOutline, scanOutline, addOutline, cubeOutline, downloadOutline, archiveOutline } from 'ionicons/icons';
+import { Capacitor } from '@capacitor/core';
+import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { Product, PurchaseList, PurchaseListItem, Unit, Vendor } from '../types';
 import { showToast } from './Toast';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -32,12 +35,13 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
   const [quickProductForm, setQuickProductForm] = useState({ name: '', description: '', vendorId: '' });
   const [linkProductQuery, setLinkProductQuery] = useState('');
   const [linkProductResults, setLinkProductResults] = useState<Product[]>([]);
+
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [orderForm, setOrderForm] = useState({ orderDate: new Date().toISOString().split('T')[0], orderNumber: '' });
   
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean; action: () => void; title: string; message: string; variant?: 'danger'|'warning'|'info' }>({
     isOpen: false, action: () => {}, title: '', message: ''
   });
-
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   useEffect(() => {
     fetchListDetails();
@@ -47,13 +51,13 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
   useEffect(() => {
     if (searchQuery.length > 0) {
       const lowerQ = searchQuery.toLowerCase();
-      // If it looks like a UPC (only numbers, >= 8 chars)
+      // If it looks like a UPC
       if (/^\d{8,}$/.test(searchQuery)) {
         handleUPCSearch(searchQuery);
       } else {
         setFilteredProducts(products.filter(p => 
           p.name.toLowerCase().includes(lowerQ) ||
-          p.upc.includes(searchQuery) ||
+          (p.upc && p.upc.includes(searchQuery)) ||
           (p.vendor_name && p.vendor_name.toLowerCase().includes(lowerQ))
         ));
       }
@@ -62,7 +66,6 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     }
   }, [searchQuery, products]);
 
-  // If user stops typing linkProductQuery for 500ms, search
   useEffect(() => {
     if (quickProductMode !== 'link' || !linkProductQuery.trim()) {
       setLinkProductResults([]);
@@ -95,21 +98,46 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     if (res.ok) setProducts(await res.json());
   };
 
-  const finalizeList = () => {
+  const finalizeList = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await fetch(`/api/purchase-lists/${listId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ 
+        name: currentList?.name, 
+        status: 'ordered', 
+        orderDate: orderForm.orderDate,
+        orderNumber: orderForm.orderNumber
+      })
+    });
+    if (res.ok) {
+      showToast('List marked as ordered');
+      setShowOrderModal(false);
+      fetchListDetails();
+    } else {
+      showToast('Failed to order list', 'error');
+    }
+  };
+
+  const archiveList = () => {
     setConfirmState({
       isOpen: true,
-      title: 'Finalize List?',
-      message: 'Are you sure you want to finalize this purchase list? This will lock the list and prevent further edits.',
+      title: 'Archive List?',
+      message: 'This will hide the list from your active lists. Are you sure?',
       variant: 'warning',
       action: async () => {
         const res = await fetch(`/api/purchase-lists/${listId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ name: currentList?.name, status: 'finalized' })
+          body: JSON.stringify({ 
+            name: currentList?.name, 
+            status: currentList?.status,
+            isArchived: true 
+          })
         });
         if (res.ok) {
-          showToast('List finalized successfully');
-          fetchListDetails();
+          showToast('List archived');
+          onClose();
         }
         setConfirmState(s => ({ ...s, isOpen: false }));
       }
@@ -145,7 +173,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     } else {
       setScannedUPC(upc);
       setQuickProductMode('create');
-      setQuickProductForm({ name: '', description: '', vendorId: vendors[0]?.id || '' });
+      setQuickProductForm({ name: '', description: '', vendorId: '' });
       setShowProductNotFoundModal(true);
     }
   };
@@ -180,7 +208,6 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       setShowQuantityModal(false);
       setSelectedProductForAdd(null);
       setSearchQuery('');
-      if (isScanning) startScanner();
     } else {
       showToast('Failed to add item', 'error');
     }
@@ -204,29 +231,37 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
   };
 
   // --- SCANNER ---
-  const startScanner = () => {
-    setIsScanning(true);
-    setScannedUPC('');
-    setTimeout(() => {
-      if (!scannerRef.current) {
-        scannerRef.current = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-        scannerRef.current.render(
-          async (decodedText) => {
-            stopScanner();
-            handleUPCSearch(decodedText);
-          },
-          () => {} // ignore errors
-        );
+  const startScanner = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      const mockUpc = prompt('Web fallback: Enter a barcode manually:');
+      if (mockUpc) {
+        handleUPCSearch(mockUpc);
+      } else {
+        showToast('Scanner only available on native device', 'error');
       }
-    }, 100);
-  };
-
-  const stopScanner = () => {
-    if (scannerRef.current) {
-      scannerRef.current.clear().catch(console.error);
-      scannerRef.current = null;
+      return;
     }
-    setIsScanning(false);
+
+    try {
+      const { camera } = await BarcodeScanner.requestPermissions();
+      if (camera !== 'granted' && camera !== 'limited') {
+        showToast('Camera permission denied', 'error');
+        return;
+      }
+      setIsScanning(true);
+      document.body.classList.add('barcode-scanner-active');
+      const result = await BarcodeScanner.scan();
+      document.body.classList.remove('barcode-scanner-active');
+      setIsScanning(false);
+      
+      if (result.barcodes && result.barcodes.length > 0) {
+        handleUPCSearch(result.barcodes[0].rawValue);
+      }
+    } catch (e) {
+      setIsScanning(false);
+      document.body.classList.remove('barcode-scanner-active');
+      showToast('Failed to start scanner', 'error');
+    }
   };
 
   const handleQuickProductSubmit = async (e: React.FormEvent) => {
@@ -235,7 +270,12 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       const res = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ ...quickProductForm, upc: scannedUPC })
+        body: JSON.stringify({ 
+          name: quickProductForm.name, 
+          description: quickProductForm.description, 
+          upcs: [scannedUPC], 
+          vendorIds: quickProductForm.vendorId ? [quickProductForm.vendorId] : [] 
+        })
       });
       if (res.ok) {
         const p = await res.json();
@@ -267,6 +307,56 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     }
   };
 
+  const generatePDF = () => {
+    if (!currentList || !currentList.items || currentList.items.length === 0) return;
+    
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text(`Purchase List: ${currentList.name}`, 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Order Date: ${new Date(currentList.orderDate || currentList.createdAt!).toLocaleDateString()}`, 14, 30);
+    if (currentList.orderNumber) {
+      doc.text(`Order Number: ${currentList.orderNumber}`, 14, 36);
+    }
+
+    // Group items by vendor
+    const itemsByVendor: Record<string, typeof currentList.items> = {};
+    currentList.items.forEach(item => {
+      const vNames = item.vendor_name ? item.vendor_name.split(', ') : ['No Vendor'];
+      vNames.forEach(vName => {
+        if (!itemsByVendor[vName]) itemsByVendor[vName] = [];
+        itemsByVendor[vName].push(item);
+      });
+    });
+
+    let currentY = 45;
+
+    for (const [vendor, items] of Object.entries(itemsByVendor)) {
+      doc.setFontSize(14);
+      doc.text(`Vendor: ${vendor}`, 14, currentY);
+      currentY += 5;
+
+      const tableData = items.map(item => [
+        item.product_name,
+        item.product_upc || 'N/A',
+        item.quantity.toString(),
+        item.unit_abbreviation
+      ]);
+
+      (doc as any).autoTable({
+        startY: currentY,
+        head: [['Product Name', 'UPC', 'Qty', 'Unit']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [20, 184, 166] }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 15;
+    }
+
+    doc.save(`ReOrderPro-${currentList.name.replace(/ /g, '_')}.pdf`);
+  };
+
   if (!currentList) return null;
 
   return (
@@ -277,13 +367,13 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       <div className="safe-area-top bg-gray-900/80 backdrop-blur-md border-b border-gray-800/60 sticky top-0 z-50">
         <div className="px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => { stopScanner(); onClose(); }} className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all-200">
+            <button onClick={onClose} className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all-200">
               <IonIcon icon={closeOutline} className="text-xl" />
             </button>
             <div>
               <h1 className="text-base font-bold text-white">{currentList.name}</h1>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider ${currentList.status === 'finalized' ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider ${currentList.status === 'ordered' ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
                   {currentList.status.toUpperCase()}
                 </span>
                 <span className="text-xs text-gray-500">• {currentList.items?.length || 0} items</span>
@@ -291,17 +381,26 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
             </div>
           </div>
           
-          {currentList.status === 'draft' && (
-            <div className="flex items-center gap-2">
-              <button data-tooltip="Lock list" onClick={finalizeList} className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 text-xs font-bold shadow-lg shadow-teal-500/10 transition-all-200 flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            {currentList.status === 'draft' ? (
+              <button data-tooltip="Order List" onClick={() => setShowOrderModal(true)} className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 text-xs font-bold shadow-lg shadow-teal-500/10 transition-all-200 flex items-center gap-1">
                 <IonIcon icon={checkmarkCircleOutline} />
-                Finalize
+                Order
               </button>
-              <button data-tooltip="Delete list" onClick={deleteList} className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/10 transition-all-200">
-                <IonIcon icon={trashOutline} />
-              </button>
-            </div>
-          )}
+            ) : (
+              <>
+                <button data-tooltip="Download PDF" onClick={generatePDF} className="p-2 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/20 transition-all-200 flex items-center">
+                  <IonIcon icon={downloadOutline} />
+                </button>
+                <button data-tooltip="Archive list" onClick={archiveList} className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition-all-200 flex items-center">
+                  <IonIcon icon={archiveOutline} />
+                </button>
+              </>
+            )}
+            <button data-tooltip="Delete list" onClick={deleteList} className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/10 transition-all-200">
+              <IonIcon icon={trashOutline} />
+            </button>
+          </div>
         </div>
 
         {currentList.status === 'draft' && (
@@ -313,25 +412,15 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-950 border border-gray-800 text-white placeholder-gray-500 focus:outline-none focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 text-sm transition-all-200"
               />
             </div>
-            <button data-tooltip="Scan barcode" onClick={isScanning ? stopScanner : startScanner} className={`px-4 rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold transition-all-200 ${isScanning ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20'}`}>
+            <button data-tooltip="Scan barcode" onClick={isScanning ? () => setIsScanning(false) : startScanner} className={`px-4 rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold transition-all-200 ${isScanning ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20'}`}>
               <IonIcon icon={scanOutline} className="text-lg" />
-              {isScanning ? 'Stop' : 'Scan'}
+              {isScanning ? 'Cancel' : 'Scan'}
             </button>
           </div>
         )}
       </div>
 
       <div className="p-4 max-w-md mx-auto space-y-4 pb-24">
-        {isScanning && (
-          <div className="bg-gray-950 rounded-2xl overflow-hidden shadow-2xl border border-gray-800 relative">
-            <div className="scanner-laser" />
-            <div id="reader" className="w-full"></div>
-            <div className="absolute top-3 right-3 z-10">
-              <span className="px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs font-semibold animate-pulse">Camera Active</span>
-            </div>
-          </div>
-        )}
-
         {searchQuery && filteredProducts.length > 0 && (
           <div className="bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
             <div className="px-4 py-2 bg-gray-950 border-b border-gray-800 text-xs font-semibold text-gray-400">Matching Products ({filteredProducts.length})</div>
@@ -353,7 +442,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
             <div className="glass-panel rounded-2xl p-8 text-center border border-dashed border-gray-800">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-900 text-gray-500 mb-3"><IonIcon icon={cubeOutline} className="text-xl" /></div>
               <p className="text-gray-400 text-sm font-medium">No items added yet</p>
-              <p className="text-gray-500 text-xs mt-1">Search or scan a barcode to add products</p>
+              {currentList.status === 'draft' && <p className="text-gray-500 text-xs mt-1">Search or scan a barcode to add products</p>}
             </div>
           ) : (
             <div className="bg-gray-900/50 rounded-2xl border border-gray-800/60 shadow-sm overflow-hidden divide-y divide-gray-800/40">
@@ -380,11 +469,11 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       </div>
 
       {/* Modals */}
-      <IonModal isOpen={showQuantityModal} onDidDismiss={() => { setShowQuantityModal(false); if (isScanning) startScanner(); }}>
+      <IonModal isOpen={showQuantityModal} onDidDismiss={() => setShowQuantityModal(false)}>
         <div className="p-6 bg-gray-900 text-gray-100 rounded-t-3xl border-t border-gray-800">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold text-white">Item Quantity</h2>
-            <button onClick={() => { setShowQuantityModal(false); if (isScanning) startScanner(); }} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
+            <button onClick={() => setShowQuantityModal(false)} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
           </div>
           {selectedProductForAdd && (
             <div className="mb-6 p-4 rounded-2xl bg-gray-950 border border-gray-800">
@@ -408,11 +497,11 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
         </div>
       </IonModal>
 
-      <IonModal isOpen={showProductNotFoundModal} onDidDismiss={() => { setShowProductNotFoundModal(false); if (isScanning) startScanner(); }}>
+      <IonModal isOpen={showProductNotFoundModal} onDidDismiss={() => setShowProductNotFoundModal(false)}>
         <div className="p-6 bg-gray-900 text-gray-100 rounded-t-3xl border-t border-gray-800 h-full overflow-y-auto">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-bold text-white">Unknown Barcode</h2>
-            <button onClick={() => { setShowProductNotFoundModal(false); if (isScanning) startScanner(); }} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
+            <button onClick={() => setShowProductNotFoundModal(false)} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
           </div>
           <p className="text-sm text-gray-400 mb-4">Barcode <span className="font-mono font-bold text-teal-400 bg-gray-950 px-1 py-0.5 rounded">{scannedUPC}</span> is not registered.</p>
           
@@ -449,6 +538,26 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
               </div>
             </div>
           )}
+        </div>
+      </IonModal>
+
+      <IonModal isOpen={showOrderModal} onDidDismiss={() => setShowOrderModal(false)} initialBreakpoint={0.5} breakpoints={[0, 0.5, 0.8]}>
+        <div className="p-6 bg-gray-900 text-gray-100 rounded-t-3xl border-t border-gray-800 h-full">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-bold text-white">Order Details</h2>
+            <button onClick={() => setShowOrderModal(false)} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
+          </div>
+          <form onSubmit={finalizeList} className="space-y-5">
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Order Date</label>
+              <input type="date" required value={orderForm.orderDate} onChange={e => setOrderForm({ ...orderForm, orderDate: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Order Number (Optional)</label>
+              <input type="text" placeholder="e.g. #ORD-12345" value={orderForm.orderNumber} onChange={e => setOrderForm({ ...orderForm, orderNumber: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" />
+            </div>
+            <button type="submit" className="w-full py-3.5 px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200">Confirm Order</button>
+          </form>
         </div>
       </IonModal>
 
