@@ -262,3 +262,13 @@ ion-toolbar {
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
+
+/* ── Mobile UX Utilities ── */
+.min-touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+input, select, textarea {
+  font-size: 16px !important; /* Prevents iOS auto-zoom on focus */
+}

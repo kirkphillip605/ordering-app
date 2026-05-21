@@ -2,10 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { eq, ilike, desc, sql } from 'drizzle-orm';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { eq, and, desc, sql, ilike } from 'drizzle-orm';
+import { eq, and, desc, sql, ilike, inArray, ne } from 'drizzle-orm';
 import { db } from './db/index.js';
 import { 
   users, 
@@ -290,17 +287,30 @@ app.delete('/api/units/:id', authenticateToken, async (req, res) => {
 // --- PRODUCTS CRUD & UPC LOOKUP ---
 
 app.get('/api/products', authenticateToken, async (req, res) => {
+  const vendorId = req.query.vendorId as string | undefined;
+
   try {
-    const list = await db.select({
+    let query = db.select({
       id: products.id,
       name: products.name,
       description: products.description,
       createdAt: products.createdAt,
       updatedAt: products.updatedAt,
       upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
-      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`
-    }).from(products).orderBy(products.name);
-    res.json(list);
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
+      vendorIds: sql<string>`(SELECT string_agg("product_vendors"."vendor_id"::text, ',') FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id")`
+    }).from(products);
+
+    if (vendorId) {
+      query = query.where(sql`EXISTS (SELECT 1 FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id" AND "product_vendors"."vendor_id" = ${vendorId})`);
+    }
+
+    const list = await query.orderBy(products.name);
+    const formattedList = list.map(p => ({
+      ...p,
+      vendorIds: p.vendorIds ? p.vendorIds.split(',') : []
+    }));
+    res.json(formattedList);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }
@@ -317,13 +327,18 @@ app.get('/api/products/search', authenticateToken, async (req, res) => {
       name: products.name,
       description: products.description,
       upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
-      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
+      vendorIds: sql<string>`(SELECT string_agg("product_vendors"."vendor_id"::text, ',') FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id")`
     })
       .from(products)
       .where(ilike(products.name, `%${q}%`))
       .orderBy(products.name)
       .limit(20);
-    res.json(results);
+    const formattedResults = results.map(p => ({
+      ...p,
+      vendorIds: p.vendorIds ? p.vendorIds.split(',') : []
+    }));
+    res.json(formattedResults);
   } catch (error) {
     res.status(500).json({ error: 'Failed to search products' });
   }
@@ -340,11 +355,12 @@ app.get('/api/products/upc/:upc', authenticateToken, async (req, res) => {
       name: products.name,
       description: products.description,
       upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
-      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
+      vendorIds: sql<string>`(SELECT string_agg("product_vendors"."vendor_id"::text, ',') FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id")`
     }).from(products).where(eq(products.id, upcRecord[0].productId)).limit(1);
 
     if (!product) return res.status(404).json({ error: 'Product not found' });
-    res.json(product);
+    res.json({ ...product, vendorIds: product.vendorIds ? product.vendorIds.split(',') : [] });
   } catch (error) {
     res.status(500).json({ error: 'Failed to query product by UPC' });
   }
@@ -352,15 +368,28 @@ app.get('/api/products/upc/:upc', authenticateToken, async (req, res) => {
 
 app.post('/api/products', authenticateToken, async (req, res) => {
   const { name, description, upcs, vendorIds } = req.body;
-  if (!name || !upcs || !upcs.length) return res.status(400).json({ error: 'Name and at least one UPC are required' });
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+
+  const validUpcs = (upcs || []).filter((u: string) => u.trim() !== '');
 
   try {
+    if (validUpcs.length > 0) {
+      const [existing] = await db.select({ upc: productUpcs.upc, productId: productUpcs.productId })
+        .from(productUpcs)
+        .where(inArray(productUpcs.upc, validUpcs))
+        .limit(1);
+      if (existing) {
+        const [conflictProduct] = await db.select().from(products).where(eq(products.id, existing.productId)).limit(1);
+        return res.status(400).json({ error: `UPC ${existing.upc} is already used by product "${conflictProduct?.name || 'Unknown'}"` });
+      }
+    }
+
     const [newProduct] = await db.insert(products).values({
       name,
       description: description || '',
     }).returning();
 
-    for (const upc of upcs) {
+    for (const upc of validUpcs) {
       await db.insert(productUpcs).values({ productId: newProduct.id, upc });
     }
     if (vendorIds && vendorIds.length > 0) {
@@ -369,11 +398,8 @@ app.post('/api/products', authenticateToken, async (req, res) => {
       }
     }
 
-    res.status(201).json({ ...newProduct, upcs, vendorIds });
+    res.status(201).json({ ...newProduct, upcs: validUpcs, vendorIds });
   } catch (error: any) {
-    if (error.code === '23505') {
-      return res.status(400).json({ error: 'A product with this UPC already exists' });
-    }
     res.status(500).json({ error: 'Failed to create product' });
   }
 });
@@ -382,16 +408,34 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
   const { name, description, upcs, vendorIds } = req.body;
   const { id } = req.params;
 
+  const validUpcs = (upcs || []).filter((u: string) => u.trim() !== '');
+
   try {
+    if (validUpcs.length > 0) {
+      const [existing] = await db.select({ upc: productUpcs.upc, productId: productUpcs.productId })
+        .from(productUpcs)
+        .where(
+           and(
+             inArray(productUpcs.upc, validUpcs),
+             ne(productUpcs.productId, id)
+           )
+        )
+        .limit(1);
+      if (existing) {
+        const [conflictProduct] = await db.select().from(products).where(eq(products.id, existing.productId)).limit(1);
+        return res.status(400).json({ error: `UPC ${existing.upc} is already used by product "${conflictProduct?.name || 'Unknown'}"` });
+      }
+    }
+
     const [updatedProduct] = await db.update(products)
       .set({ name, description: description || '', updatedAt: new Date() })
       .where(eq(products.id, id))
       .returning();
     if (!updatedProduct) return res.status(404).json({ error: 'Product not found' });
 
-    if (upcs && upcs.length > 0) {
+    if (upcs !== undefined) {
       await db.delete(productUpcs).where(eq(productUpcs.productId, id));
-      for (const upc of upcs) {
+      for (const upc of validUpcs) {
         await db.insert(productUpcs).values({ productId: id, upc });
       }
     }
@@ -404,7 +448,6 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
 
     res.json(updatedProduct);
   } catch (error: any) {
-    if (error.code === '23505') return res.status(400).json({ error: 'A product with this UPC already exists' });
     res.status(500).json({ error: 'Failed to update product' });
   }
 });
@@ -432,10 +475,11 @@ app.patch('/api/products/:id/upc', authenticateToken, async (req, res) => {
       name: products.name,
       description: products.description,
       upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
-      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
+      vendorIds: sql<string>`(SELECT string_agg("product_vendors"."vendor_id"::text, ',') FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id")`
     }).from(products).where(eq(products.id, id)).limit(1);
 
-    res.json(full);
+    res.json({ ...full, vendorIds: full.vendorIds ? full.vendorIds.split(',') : [] });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to update product UPC' });
   }
@@ -487,7 +531,6 @@ app.get('/api/purchase-lists/:id', authenticateToken, async (req, res) => {
       productId: purchaseListItems.productId,
       quantity: purchaseListItems.quantity,
       unitId: purchaseListItems.unitId,
-      createdAt: purchaseListItems.createdAt,
       createdAt: purchaseListItems.createdAt,
       updatedAt: purchaseListItems.updatedAt,
       product_name: products.name,

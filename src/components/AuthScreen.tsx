@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { IonApp, IonContent, IonIcon } from '@ionic/react';
 import { clipboardOutline, logInOutline, alertCircleOutline } from 'ionicons/icons';
+import { useTranslation, LanguageToggle } from '../i18n';
 
 interface Props {
   onAuth: (token: string, user: { id: string; username: string }) => void;
 }
 
 export function AuthScreen({ onAuth }: Props) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -25,7 +27,7 @@ export function AuthScreen({ onAuth }: Props) {
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Authentication failed');
+      if (!res.ok) throw new Error(data.error || t('toast.failedSave'));
       localStorage.setItem('token', data.token);
       onAuth(data.token, data.user);
     } catch (err: any) {
@@ -39,6 +41,9 @@ export function AuthScreen({ onAuth }: Props) {
     <IonApp>
       <IonContent className="bg-gray-950 flex items-center justify-center min-h-screen">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.08),transparent_45%)] pointer-events-none" />
+        <div className="absolute top-4 right-4 z-10">
+          <LanguageToggle />
+        </div>
         <div className="max-w-md w-full mx-auto px-6 py-12 flex flex-col justify-center min-h-screen">
           <div className="glass-panel rounded-3xl p-8 border border-gray-800/80 shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-teal-500/50 to-transparent" />
@@ -46,20 +51,20 @@ export function AuthScreen({ onAuth }: Props) {
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-400 mb-4 shadow-lg shadow-teal-500/5">
                 <IonIcon icon={clipboardOutline} className="text-3xl" />
               </div>
-              <h1 className="text-3xl font-bold text-white tracking-tight">ChefList</h1>
-              <p className="text-gray-400 mt-2 text-sm">Smart Restaurant Purchase Lists</p>
+              <h1 className="text-3xl font-bold text-white tracking-tight">ReOrderPro</h1>
+              <p className="text-gray-400 mt-2 text-sm">{t('auth.subtitle')}</p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Username</label>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('users.username')}</label>
                 <input type="text" required value={username} onChange={e => setUsername(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-gray-900/80 border border-gray-800 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200 input-glow"
-                  placeholder="Enter your username" />
+                  className="w-full px-4 min-touch-target rounded-xl bg-gray-900/80 border border-gray-800 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200 input-glow"
+                  placeholder={t('auth.usernamePlaceholder')} />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Password</label>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('users.password')}</label>
                 <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-gray-900/80 border border-gray-800 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200 input-glow"
+                  className="w-full px-4 min-touch-target rounded-xl bg-gray-900/80 border border-gray-800 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200 input-glow"
                   placeholder="••••••••" />
               </div>
               {error && (
@@ -69,15 +74,15 @@ export function AuthScreen({ onAuth }: Props) {
                 </div>
               )}
               <button type="submit" disabled={loading}
-                className="w-full py-3.5 px-4 rounded-xl bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200 flex items-center justify-center gap-2">
+                className="w-full py-3.5 min-touch-target px-4 rounded-xl bg-teal-500 hover:bg-teal-600 disabled:opacity-60 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200 flex items-center justify-center gap-2">
                 <IonIcon icon={logInOutline} className="text-xl" />
-                {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+                {loading ? t('auth.loading') : isSignUp ? t('auth.createAccount') : t('auth.signIn')}
               </button>
             </form>
             <div className="mt-6 text-center">
               <button onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
-                className="text-teal-400 hover:text-teal-300 text-xs font-semibold transition-all-200">
-                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+                className="text-teal-400 hover:text-teal-300 text-xs font-semibold transition-all-200 p-2 min-touch-target">
+                {isSignUp ? t('auth.alreadyHaveAccount') : t('auth.dontHaveAccount')}
               </button>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { IonIcon, IonModal } from '@ionic/react';
 import { addOutline, createOutline, trashOutline, peopleOutline, closeOutline } from 'ionicons/icons';
 import { showToast } from './Toast';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useTranslation } from '../i18n';
 
 interface User {
   id: string;
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function UsersTab({ token }: Props) {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<User[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ id: '', username: '', password: '', role: 'standard' });
@@ -40,7 +42,7 @@ export function UsersTab({ token }: Props) {
     
     // Validate
     if (!form.id && !form.password) {
-      showToast('Password is required for new users', 'error');
+      showToast(t('toast.passwordRequired'), 'error');
       return;
     }
 
@@ -51,27 +53,27 @@ export function UsersTab({ token }: Props) {
     });
 
     if (res.ok) {
-      showToast(form.id ? 'User updated' : 'User created');
+      showToast(form.id ? t('toast.userUpdated') : t('toast.userCreated'));
       fetchUsers();
       setShowModal(false);
     } else {
       const data = await res.json();
-      showToast(data.error || 'Failed to save user', 'error');
+      showToast(data.error || t('toast.failedSave'), 'error');
     }
   };
 
   const handleDelete = (id: string) => {
     setConfirmState({
       isOpen: true,
-      title: 'Delete User',
-      message: 'Are you sure you want to delete this user? This cannot be undone.',
+      title: t('users.deleteTitle'),
+      message: t('users.deleteMessage'),
       action: async () => {
         const res = await fetch(`/api/users/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) {
-          showToast('User deleted');
+          showToast(t('toast.userDeleted'));
           fetchUsers();
         } else {
-          showToast('Failed to delete user', 'error');
+          showToast(t('toast.failedDelete'), 'error');
         }
         setConfirmState(s => ({ ...s, isOpen: false }));
       }
@@ -81,16 +83,16 @@ export function UsersTab({ token }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-base font-bold text-white">Manage Users</h2>
-        <button onClick={() => { setForm({ id: '', username: '', password: '', role: 'standard' }); setShowModal(true); }} className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 text-xs font-bold shadow-lg shadow-teal-500/10 transition-all-200 flex items-center gap-1">
-          <IonIcon icon={addOutline} /> Add User
+        <h2 className="text-base font-bold text-white">{t('users.title')}</h2>
+        <button onClick={() => { setForm({ id: '', username: '', password: '', role: 'standard' }); setShowModal(true); }} className="px-4 min-touch-target rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 text-xs font-bold shadow-lg shadow-teal-500/10 transition-all-200 flex items-center gap-1">
+          <IonIcon icon={addOutline} /> {t('users.addUser')}
         </button>
       </div>
 
       {users.length === 0 ? (
         <div className="glass-panel rounded-2xl p-8 text-center border border-gray-800/60">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-900 text-gray-500 mb-3"><IonIcon icon={peopleOutline} className="text-xl" /></div>
-          <p className="text-gray-400 text-sm font-medium">No users found</p>
+          <p className="text-gray-400 text-sm font-medium">{t('users.noUsers')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -102,12 +104,12 @@ export function UsersTab({ token }: Props) {
                   <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider ${user.role === 'admin' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-gray-800 text-gray-400 border border-gray-700'}`}>
                     {user.role.toUpperCase()}
                   </span>
-                  <span className="text-[10px] text-gray-600 font-medium ml-1">Joined {new Date(user.createdAt).toLocaleDateString()}</span>
+                  <span className="text-[10px] text-gray-600 font-medium ml-1">{t('users.joined')} {new Date(user.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
               <div className="flex gap-1">
-                <button onClick={() => { setForm({ id: user.id, username: user.username, password: '', role: user.role }); setShowModal(true); }} className="p-2 rounded-xl hover:bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={createOutline} /></button>
-                <button onClick={() => handleDelete(user.id)} className="p-2 rounded-xl hover:bg-rose-500/10 text-rose-400 transition-all-200"><IonIcon icon={trashOutline} /></button>
+                <button onClick={() => { setForm({ id: user.id, username: user.username, password: '', role: user.role }); setShowModal(true); }} className="p-2 min-touch-target rounded-xl hover:bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={createOutline} /></button>
+                <button onClick={() => handleDelete(user.id)} className="p-2 min-touch-target rounded-xl hover:bg-rose-500/10 text-rose-400 transition-all-200"><IonIcon icon={trashOutline} /></button>
               </div>
             </div>
           ))}
@@ -117,27 +119,27 @@ export function UsersTab({ token }: Props) {
       <IonModal isOpen={showModal} onDidDismiss={() => setShowModal(false)} initialBreakpoint={0.7} breakpoints={[0, 0.7, 0.9]}>
         <div className="p-6 bg-gray-900 text-gray-100 rounded-t-3xl border-t border-gray-800 h-full">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-white">{form.id ? 'Edit User' : 'Add User'}</h2>
-            <button onClick={() => setShowModal(false)} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
+            <h2 className="text-lg font-bold text-white">{form.id ? t('users.editUser') : t('users.addUser')}</h2>
+            <button onClick={() => setShowModal(false)} className="p-1.5 min-touch-target rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
           </div>
 
           <form onSubmit={handleSave} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Username</label>
-              <input type="text" required value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200" />
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('users.username')}</label>
+              <input type="text" required value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Password {form.id && '(Leave blank to keep current)'}</label>
-              <input type="password" required={!form.id} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200" />
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('users.password')} {form.id && `(${t('users.passwordHint')})`}</label>
+              <input type="password" required={!form.id} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Role</label>
-              <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200">
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('users.role')}</label>
+              <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200">
                 <option value="standard">Standard</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
-            <button type="submit" className="w-full py-3.5 px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg transition duration-200">Save User</button>
+            <button type="submit" className="w-full min-touch-target px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg transition duration-200">{t('users.saveUser')}</button>
           </form>
         </div>
       </IonModal>

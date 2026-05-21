@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { IonApp, IonContent, IonHeader, IonToolbar, IonIcon } from '@ionic/react';
-import { clipboardOutline, cubeOutline, businessOutline, optionsOutline } from 'ionicons/icons';
+import { clipboardOutline, cubeOutline, businessOutline, optionsOutline, languageOutline } from 'ionicons/icons';
 import { User, Vendor, Unit, Product, PurchaseList } from './types';
 import { AuthScreen } from './components/AuthScreen';
 import { ListsTab } from './components/ListsTab';
@@ -10,8 +10,9 @@ import { UnitsTab } from './components/UnitsTab';
 import { UsersTab } from './components/UsersTab';
 import { ListEditScreen } from './components/ListEditScreen';
 import { ToastContainer } from './components/Toast';
+import { LanguageProvider, useTranslation } from './i18n';
 
-export default function App() {
+function AppContent() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(null);
   
@@ -22,6 +23,8 @@ export default function App() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [lists, setLists] = useState<PurchaseList[]>([]);
+
+  const { t, language, setLanguage } = useTranslation();
 
   useEffect(() => {
     if (token) {
@@ -64,12 +67,17 @@ export default function App() {
             <IonToolbar className="px-4 py-3 bg-gray-900 border-b border-gray-800/60">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-xl font-bold text-white tracking-tight">ReOrder Pro</h1>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Logged in as <span className="text-teal-400 font-semibold">{user?.username}</span></p>
+                  <h1 className="text-xl font-bold text-white tracking-tight">{t('app.title')}</h1>
+                  <p className="text-[10px] text-gray-500 mt-0.5">{t('app.loggedInAs')} <span className="text-teal-400 font-semibold">{user?.username}</span></p>
                 </div>
-                <button onClick={handleLogout} className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold border border-gray-700/50 transition-all-200">
-                  Sign Out
-                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')} className="p-1.5 min-touch-target rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/50 flex items-center justify-center transition-all-200">
+                    <IonIcon icon={languageOutline} className="text-lg" />
+                  </button>
+                  <button onClick={handleLogout} className="px-3 min-touch-target rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold border border-gray-700/50 transition-all-200">
+                    {t('app.signOut')}
+                  </button>
+                </div>
               </div>
             </IonToolbar>
           </IonHeader>
@@ -81,14 +89,14 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="glass-panel rounded-2xl p-4 border border-gray-800/60">
                   <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-semibold uppercase tracking-wider">Active Lists</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider">{t('dashboard.activeLists')}</span>
                     <IonIcon icon={clipboardOutline} className="text-teal-400" />
                   </div>
                   <div className="text-2xl font-bold text-white">{lists.filter(l => l.status === 'draft').length}</div>
                 </div>
                 <div className="glass-panel rounded-2xl p-4 border border-gray-800/60">
                   <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-semibold uppercase tracking-wider">Products</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider">{t('dashboard.products')}</span>
                     <IonIcon icon={cubeOutline} className="text-teal-400" />
                   </div>
                   <div className="text-2xl font-bold text-white">{products.length}</div>
@@ -105,13 +113,13 @@ export default function App() {
 
           <div className="fixed bottom-0 left-0 right-0 bg-gray-900/90 backdrop-blur-md border-t border-gray-800/60 px-4 py-2 flex justify-around items-center z-50 safe-area-bottom">
             {[
-              { id: 'lists', icon: clipboardOutline, label: 'Lists', show: true },
-              { id: 'products', icon: cubeOutline, label: 'Products', show: true },
-              { id: 'vendors', icon: businessOutline, label: 'Vendors', show: true },
-              { id: 'units', icon: optionsOutline, label: 'Units', show: true },
-              { id: 'users', icon: optionsOutline, label: 'Users', show: user?.role === 'admin' }
+              { id: 'lists', icon: clipboardOutline, label: t('nav.lists'), show: true },
+              { id: 'products', icon: cubeOutline, label: t('nav.products'), show: true },
+              { id: 'vendors', icon: businessOutline, label: t('nav.vendors'), show: true },
+              { id: 'units', icon: optionsOutline, label: t('nav.units'), show: true },
+              { id: 'users', icon: optionsOutline, label: t('nav.users'), show: user?.role === 'admin' }
             ].filter(t => t.show).map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all-200 ${activeTab === tab.id ? 'text-teal-400 font-bold' : 'text-gray-500 hover:text-gray-300'}`}>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col items-center gap-1 py-1 px-3 min-touch-target rounded-xl transition-all-200 ${activeTab === tab.id ? 'text-teal-400 font-bold' : 'text-gray-500 hover:text-gray-300'}`}>
                 <IonIcon icon={tab.icon} className="text-lg" />
                 <span className="text-[9px] uppercase tracking-wider font-semibold">{tab.label}</span>
               </button>
@@ -120,5 +128,13 @@ export default function App() {
         </>
       )}
     </IonApp>
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 }

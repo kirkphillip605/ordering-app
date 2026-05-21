@@ -1,6 +1,7 @@
 import React from 'react';
 import { IonIcon } from '@ionic/react';
 import { alertCircleOutline, warningOutline, trashOutline } from 'ionicons/icons';
+import { useTranslation } from '../i18n';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -15,9 +16,10 @@ interface ConfirmDialogProps {
 
 export function ConfirmDialog({
   isOpen, title, message,
-  confirmLabel = 'Confirm', cancelLabel = 'Cancel',
+  confirmLabel, cancelLabel,
   variant = 'danger', onConfirm, onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   if (!isOpen) return null;
 
   const styles = {
@@ -51,11 +53,11 @@ export function ConfirmDialog({
           <p className="text-sm text-gray-400 mb-6 leading-relaxed">{message}</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-3 px-4 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition-all-200 border border-gray-700/50">
-            {cancelLabel}
+          <button onClick={onCancel} className="flex-1 py-3 px-4 min-touch-target rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm transition-all-200 border border-gray-700/50">
+            {cancelLabel || t('confirm.cancel')}
           </button>
-          <button onClick={onConfirm} className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm transition-all-200 ${s.button}`}>
-            {confirmLabel}
+          <button onClick={onConfirm} className={`flex-1 py-3 px-4 min-touch-target rounded-xl font-bold text-sm transition-all-200 ${s.button}`}>
+            {confirmLabel || t('confirm.confirm')}
           </button>
         </div>
       </div>

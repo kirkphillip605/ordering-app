@@ -9,6 +9,7 @@ import { Product, PurchaseList, PurchaseListItem, Unit, Vendor } from '../types'
 import { showToast } from './Toast';
 import { ConfirmDialog } from './ConfirmDialog';
 import { WebBarcodeScanner } from './WebBarcodeScanner';
+import { useTranslation } from '../i18n';
 
 interface Props {
   token: string;
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function ListEditScreen({ token, listId, vendors, units, onClose }: Props) {
+  const { t } = useTranslation();
   const [currentList, setCurrentList] = useState<(PurchaseList & { items: PurchaseListItem[] }) | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -86,11 +88,11 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       if (res.ok) {
         setCurrentList(await res.json());
       } else {
-        showToast('Failed to load list details', 'error');
+        showToast(t('toast.failedSave'), 'error');
         onClose();
       }
     } catch (e) {
-      showToast('Network error loading list', 'error');
+      showToast(t('toast.networkError'), 'error');
       onClose();
     }
   };
@@ -113,19 +115,19 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       })
     });
     if (res.ok) {
-      showToast('List marked as ordered');
+      showToast(t('toast.listOrdered'));
       setShowOrderModal(false);
       fetchListDetails();
     } else {
-      showToast('Failed to order list', 'error');
+      showToast(t('toast.failedSave'), 'error');
     }
   };
 
   const archiveList = () => {
     setConfirmState({
       isOpen: true,
-      title: 'Archive List?',
-      message: 'This will hide the list from your active lists. Are you sure?',
+      title: t('listEdit.archiveTitle'),
+      message: t('listEdit.archiveMessage'),
       variant: 'warning',
       action: async () => {
         const res = await fetch(`/api/purchase-lists/${listId}`, {
@@ -138,7 +140,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
           })
         });
         if (res.ok) {
-          showToast('List archived');
+          showToast(t('toast.listArchived'));
           onClose();
         }
         setConfirmState(s => ({ ...s, isOpen: false }));
@@ -149,8 +151,8 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
   const deleteList = () => {
     setConfirmState({
       isOpen: true,
-      title: 'Delete List?',
-      message: 'Are you sure you want to delete this purchase list? This cannot be undone.',
+      title: t('listEdit.deleteTitle'),
+      message: t('listEdit.deleteMessage'),
       variant: 'danger',
       action: async () => {
         const res = await fetch(`/api/purchase-lists/${listId}`, {
@@ -158,7 +160,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
-          showToast('List deleted');
+          showToast(t('toast.listDeleted'));
           onClose();
         }
         setConfirmState(s => ({ ...s, isOpen: false }));
@@ -205,21 +207,21 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
 
     if (res.ok) {
       const data = await res.json();
-      showToast(data._merged ? 'Updated item quantity' : 'Item added to list');
+      showToast(data._merged ? t('toast.itemUpdated') : t('toast.itemAdded'));
       fetchListDetails();
       setShowQuantityModal(false);
       setSelectedProductForAdd(null);
       setSearchQuery('');
     } else {
-      showToast('Failed to add item', 'error');
+      showToast(t('toast.failedSave'), 'error');
     }
   };
 
   const deleteListItem = (itemId: string) => {
     setConfirmState({
       isOpen: true,
-      title: 'Remove Item?',
-      message: 'Are you sure you want to remove this item from the list?',
+      title: t('listEdit.removeItemTitle'),
+      message: t('listEdit.removeItemMessage'),
       variant: 'danger',
       action: async () => {
         const res = await fetch(`/api/purchase-list-items/${itemId}`, {
@@ -242,7 +244,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     try {
       const { camera } = await BarcodeScanner.requestPermissions();
       if (camera !== 'granted' && camera !== 'limited') {
-        showToast('Camera permission denied', 'error');
+        showToast(t('toast.cameraPermissionDenied'), 'error');
         return;
       }
       setIsScanning(true);
@@ -257,7 +259,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     } catch (e) {
       setIsScanning(false);
       document.body.classList.remove('barcode-scanner-active');
-      showToast('Failed to start scanner', 'error');
+      showToast(t('toast.scannerFailed'), 'error');
     }
   };
 
@@ -281,7 +283,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
         handleProductClick(p);
       } else {
         const d = await res.json();
-        showToast(d.error || 'Failed to create', 'error');
+        showToast(d.error || t('toast.failedSave'), 'error');
       }
     }
   };
@@ -294,13 +296,13 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     });
     if (res.ok) {
       const p = await res.json();
-      showToast('UPC linked successfully');
+      showToast(t('toast.upcLinked'));
       fetchProducts();
       setShowProductNotFoundModal(false);
       handleProductClick(p);
     } else {
       const d = await res.json();
-      showToast(d.error || 'Failed to link', 'error');
+      showToast(d.error || t('toast.failedSave'), 'error');
     }
   };
 
@@ -309,9 +311,9 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     
     const doc = new jsPDF();
     doc.setFontSize(18);
-    doc.text(`Purchase List: ${currentList.name}`, 14, 22);
+    doc.text(`${t('lists.title')}: ${currentList.name}`, 14, 22);
     doc.setFontSize(11);
-    doc.text(`Order Date: ${new Date(currentList.orderDate || currentList.createdAt!).toLocaleDateString()}`, 14, 30);
+    doc.text(`${t('listEdit.orderDate')}: ${new Date(currentList.orderDate || currentList.createdAt!).toLocaleDateString()}`, 14, 30);
     if (currentList.orderNumber) {
       doc.text(`Order Number: ${currentList.orderNumber}`, 14, 36);
     }
@@ -319,7 +321,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     // Group items by vendor
     const itemsByVendor: Record<string, typeof currentList.items> = {};
     currentList.items.forEach(item => {
-      const vNames = item.vendor_name ? item.vendor_name.split(', ') : ['No Vendor'];
+      const vNames = item.vendor_name ? item.vendor_name.split(', ') : [t('listEdit.noVendor')];
       vNames.forEach(vName => {
         if (!itemsByVendor[vName]) itemsByVendor[vName] = [];
         itemsByVendor[vName].push(item);
@@ -330,7 +332,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
 
     for (const [vendor, items] of Object.entries(itemsByVendor)) {
       doc.setFontSize(14);
-      doc.text(`Vendor: ${vendor}`, 14, currentY);
+      doc.text(`${t('listEdit.vendor')}: ${vendor}`, 14, currentY);
       currentY += 5;
 
       const tableData = items.map(item => [
@@ -364,37 +366,37 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       <div className="safe-area-top bg-gray-900/80 backdrop-blur-md border-b border-gray-800/60 sticky top-0 z-50">
         <div className="px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all-200">
+            <button onClick={onClose} className="p-2 min-touch-target rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all-200">
               <IonIcon icon={closeOutline} className="text-xl" />
             </button>
             <div>
               <h1 className="text-base font-bold text-white">{currentList.name}</h1>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider ${currentList.status === 'ordered' ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
-                  {currentList.status.toUpperCase()}
+                  {currentList.status.toUpperCase() === 'ACTIVE' ? t('lists.statusActive') : currentList.status.toUpperCase() === 'FINALIZED' ? t('lists.statusFinalized') : currentList.status.toUpperCase() === 'ORDERED' ? t('lists.ordered') : t('status.draft')}
                 </span>
-                <span className="text-xs text-gray-500">• {currentList.items?.length || 0} items</span>
+                <span className="text-xs text-gray-500">• {currentList.items?.length || 0} {t('lists.items')}</span>
               </div>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
             {currentList.status === 'draft' ? (
-              <button data-tooltip="Order List" onClick={() => setShowOrderModal(true)} className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 text-xs font-bold shadow-lg shadow-teal-500/10 transition-all-200 flex items-center gap-1">
+              <button data-tooltip={t('listEdit.order')} onClick={() => setShowOrderModal(true)} className="px-3 min-touch-target py-1.5 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 text-xs font-bold shadow-lg shadow-teal-500/10 transition-all-200 flex items-center gap-1">
                 <IonIcon icon={checkmarkCircleOutline} />
-                Order
+                {t('listEdit.order')}
               </button>
             ) : (
               <>
-                <button data-tooltip="Download PDF" onClick={generatePDF} className="p-2 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/20 transition-all-200 flex items-center">
+                <button data-tooltip="Download PDF" onClick={generatePDF} className="p-2 min-touch-target rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/20 transition-all-200 flex items-center">
                   <IonIcon icon={downloadOutline} />
                 </button>
-                <button data-tooltip="Archive list" onClick={archiveList} className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition-all-200 flex items-center">
+                <button data-tooltip={t('listEdit.archiveTitle')} onClick={archiveList} className="p-2 min-touch-target rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition-all-200 flex items-center">
                   <IonIcon icon={archiveOutline} />
                 </button>
               </>
             )}
-            <button data-tooltip="Delete list" onClick={deleteList} className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/10 transition-all-200">
+            <button data-tooltip={t('listEdit.deleteTitle')} onClick={deleteList} className="p-2 min-touch-target rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/10 transition-all-200">
               <IonIcon icon={trashOutline} />
             </button>
           </div>
@@ -405,13 +407,13 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
             <div className="relative flex-1">
               <IonIcon icon={searchOutline} className="absolute left-3.5 top-1/2 -trangray-y-1/2 text-gray-500 text-lg" />
               <input 
-                type="text" placeholder="Search or type UPC..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-950 border border-gray-800 text-white placeholder-gray-500 focus:outline-none focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 text-sm transition-all-200"
+                type="text" placeholder={t('listEdit.searchPlaceholder')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                className="w-full min-touch-target pl-10 pr-4 py-2.5 rounded-xl bg-gray-950 border border-gray-800 text-white placeholder-gray-500 focus:outline-none focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 text-sm transition-all-200"
               />
             </div>
-            <button data-tooltip="Scan barcode" onClick={isScanning ? () => setIsScanning(false) : startScanner} className={`px-4 rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold transition-all-200 ${isScanning ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20'}`}>
+            <button data-tooltip={t('listEdit.scan')} onClick={isScanning ? () => setIsScanning(false) : startScanner} className={`px-4 min-touch-target rounded-xl flex items-center justify-center gap-1.5 text-sm font-bold transition-all-200 ${isScanning ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20'}`}>
               <IonIcon icon={scanOutline} className="text-lg" />
-              {isScanning ? 'Cancel' : 'Scan'}
+              {isScanning ? t('listEdit.cancel') : t('listEdit.scan')}
             </button>
           </div>
         )}
@@ -420,9 +422,9 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       <div className="p-4 max-w-md mx-auto space-y-4 pb-24">
         {searchQuery && filteredProducts.length > 0 && (
           <div className="bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
-            <div className="px-4 py-2 bg-gray-950 border-b border-gray-800 text-xs font-semibold text-gray-400">Matching Products ({filteredProducts.length})</div>
+            <div className="px-4 py-2 bg-gray-950 border-b border-gray-800 text-xs font-semibold text-gray-400">{t('listEdit.matchingProducts')} ({filteredProducts.length})</div>
             {filteredProducts.map(product => (
-              <button key={product.id} onClick={() => handleProductClick(product)} className="w-full px-4 py-3 text-left hover:bg-gray-800/50 border-b border-gray-800/40 last:border-0 flex justify-between items-center transition-all-200">
+              <button key={product.id} onClick={() => handleProductClick(product)} className="w-full px-4 min-touch-target py-3 text-left hover:bg-gray-800/50 border-b border-gray-800/40 last:border-0 flex justify-between items-center transition-all-200">
                 <div>
                   <div className="font-semibold text-gray-200 text-sm">{product.name}</div>
                   <div className="text-xs text-gray-500">UPC: {product.upc}</div>
@@ -434,19 +436,19 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
         )}
 
         <div className="space-y-3">
-          <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Items in List</h2>
+          <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">{t('listEdit.itemsInList')}</h2>
           {(!currentList.items || currentList.items.length === 0) ? (
             <div className="glass-panel rounded-2xl p-8 text-center border border-dashed border-gray-800">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-900 text-gray-500 mb-3"><IonIcon icon={cubeOutline} className="text-xl" /></div>
-              <p className="text-gray-400 text-sm font-medium">No items added yet</p>
-              {currentList.status === 'draft' && <p className="text-gray-500 text-xs mt-1">Search or scan a barcode to add products</p>}
+              <p className="text-gray-400 text-sm font-medium">{t('listEdit.noItems')}</p>
+              {currentList.status === 'draft' && <p className="text-gray-500 text-xs mt-1">{t('listEdit.noItemsHint')}</p>}
             </div>
           ) : (
             <div className="bg-gray-900/50 rounded-2xl border border-gray-800/60 shadow-sm overflow-hidden divide-y divide-gray-800/40">
               {currentList.items.map(item => {
                 const product = products.find(p => p.id === item.productId);
                 return (
-                  <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-900/30 transition-all-200" onClick={() => { if(currentList.status === 'draft' && product) handleProductClick(product, item); }}>
+                  <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-900/30 transition-all-200 cursor-pointer" onClick={() => { if(currentList.status === 'draft' && product) handleProductClick(product, item); }}>
                     <div>
                       <h3 className="font-semibold text-gray-200 text-sm">{item.product_name}</h3>
                       <p className="text-xs text-gray-500 mt-0.5">UPC: {item.product_upc}</p>
@@ -454,7 +456,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
                     <div className="flex items-center gap-3">
                       <span className="px-3 py-1 rounded-lg bg-gray-800 text-teal-400 text-sm font-bold border border-gray-700/50">{item.quantity} {item.unit_abbreviation}</span>
                       {currentList.status === 'draft' && (
-                        <button onClick={(e) => { e.stopPropagation(); deleteListItem(item.id); }} className="p-2 rounded-lg hover:bg-rose-500/10 text-rose-400 transition-all-200"><IonIcon icon={trashOutline} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteListItem(item.id); }} className="p-2 min-touch-target rounded-lg hover:bg-rose-500/10 text-rose-400 transition-all-200"><IonIcon icon={trashOutline} /></button>
                       )}
                     </div>
                   </div>
@@ -469,8 +471,8 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       <IonModal isOpen={showQuantityModal} onDidDismiss={() => setShowQuantityModal(false)}>
         <div className="p-6 bg-gray-900 text-gray-100 rounded-t-3xl border-t border-gray-800">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-white">Item Quantity</h2>
-            <button onClick={() => setShowQuantityModal(false)} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
+            <h2 className="text-lg font-bold text-white">{t('listEdit.itemQuantity')}</h2>
+            <button onClick={() => setShowQuantityModal(false)} className="p-1.5 min-touch-target rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
           </div>
           {selectedProductForAdd && (
             <div className="mb-6 p-4 rounded-2xl bg-gray-950 border border-gray-800">
@@ -480,16 +482,16 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
           )}
           <form onSubmit={submitAddItem} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Quantity</label>
-              <input type="number" step="any" required value={addItemForm.quantity} onChange={e => setAddItemForm({ ...addItemForm, quantity: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" autoFocus />
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('listEdit.quantity')}</label>
+              <input type="number" step="any" required value={addItemForm.quantity} onChange={e => setAddItemForm({ ...addItemForm, quantity: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" autoFocus />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Unit</label>
-              <select value={addItemForm.unitId} onChange={e => setAddItemForm({ ...addItemForm, unitId: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200">
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('listEdit.unit')}</label>
+              <select value={addItemForm.unitId} onChange={e => setAddItemForm({ ...addItemForm, unitId: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200">
                 {units.map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}
               </select>
             </div>
-            <button type="submit" className="w-full py-3.5 px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200">Save Item</button>
+            <button type="submit" className="w-full py-3.5 min-touch-target px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200">{t('listEdit.saveItem')}</button>
           </form>
         </div>
       </IonModal>
@@ -497,39 +499,39 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       <IonModal isOpen={showProductNotFoundModal} onDidDismiss={() => setShowProductNotFoundModal(false)}>
         <div className="p-6 bg-gray-900 text-gray-100 rounded-t-3xl border-t border-gray-800 h-full overflow-y-auto">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold text-white">Unknown Barcode</h2>
-            <button onClick={() => setShowProductNotFoundModal(false)} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
+            <h2 className="text-lg font-bold text-white">{t('listEdit.unknownBarcode')}</h2>
+            <button onClick={() => setShowProductNotFoundModal(false)} className="p-1.5 min-touch-target rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
           </div>
-          <p className="text-sm text-gray-400 mb-4">Barcode <span className="font-mono font-bold text-teal-400 bg-gray-950 px-1 py-0.5 rounded">{scannedUPC}</span> is not registered.</p>
+          <p className="text-sm text-gray-400 mb-4">{t('listEdit.unknownBarcode')} <span className="font-mono font-bold text-teal-400 bg-gray-950 px-1 py-0.5 rounded">{scannedUPC}</span> {t('listEdit.barcodeNotRegistered')}</p>
           
           <div className="flex rounded-lg bg-gray-950 p-1 mb-6 border border-gray-800">
-            <button onClick={() => setQuickProductMode('create')} className={`flex-1 text-sm font-semibold py-2 rounded-md transition-all-200 ${quickProductMode === 'create' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Create New</button>
-            <button onClick={() => setQuickProductMode('link')} className={`flex-1 text-sm font-semibold py-2 rounded-md transition-all-200 ${quickProductMode === 'link' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}>Link to Existing</button>
+            <button onClick={() => setQuickProductMode('create')} className={`flex-1 min-touch-target text-sm font-semibold py-2 rounded-md transition-all-200 ${quickProductMode === 'create' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}>{t('listEdit.createNew')}</button>
+            <button onClick={() => setQuickProductMode('link')} className={`flex-1 min-touch-target text-sm font-semibold py-2 rounded-md transition-all-200 ${quickProductMode === 'link' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}>{t('listEdit.linkToExisting')}</button>
           </div>
 
           {quickProductMode === 'create' ? (
             <form onSubmit={handleQuickProductSubmit} className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Name</label>
-                <input type="text" required value={quickProductForm.name} onChange={e => setQuickProductForm({ ...quickProductForm, name: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200" placeholder="Product name" />
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('listEdit.productName')}</label>
+                <input type="text" required value={quickProductForm.name} onChange={e => setQuickProductForm({ ...quickProductForm, name: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200" placeholder={t('listEdit.productName')} />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Vendor</label>
-                <select value={quickProductForm.vendorId} onChange={e => setQuickProductForm({ ...quickProductForm, vendorId: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200">
-                  <option value="">No Vendor</option>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('listEdit.vendor')}</label>
+                <select value={quickProductForm.vendorId} onChange={e => setQuickProductForm({ ...quickProductForm, vendorId: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200">
+                  <option value="">{t('listEdit.noVendor')}</option>
                   {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
               </div>
-              <button type="submit" className="w-full py-3.5 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg transition duration-200">Create & Add to List</button>
+              <button type="submit" className="w-full min-touch-target py-3.5 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg transition duration-200">{t('listEdit.createAndAdd')}</button>
             </form>
           ) : (
             <div className="space-y-4">
-              <input type="text" value={linkProductQuery} onChange={e => setLinkProductQuery(e.target.value)} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200" placeholder="Search for existing product..." />
+              <input type="text" value={linkProductQuery} onChange={e => setLinkProductQuery(e.target.value)} className="w-full min-touch-target px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:border-teal-500/50 transition-all-200" placeholder={t('listEdit.searchExisting')} />
               <div className="space-y-2">
                 {linkProductResults.map(p => (
-                  <button key={p.id} onClick={() => linkProduct(p)} className="w-full p-3 bg-gray-950 rounded-xl border border-gray-800 text-left hover:border-teal-500/50 transition-all-200">
+                  <button key={p.id} onClick={() => linkProduct(p)} className="w-full min-touch-target p-3 bg-gray-950 rounded-xl border border-gray-800 text-left hover:border-teal-500/50 transition-all-200">
                     <div className="font-semibold text-sm text-white">{p.name}</div>
-                    <div className="text-xs text-gray-500">Current UPC: {p.upc}</div>
+                    <div className="text-xs text-gray-500">{t('listEdit.currentUpc')}: {p.upc}</div>
                   </button>
                 ))}
               </div>
@@ -541,19 +543,19 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       <IonModal isOpen={showOrderModal} onDidDismiss={() => setShowOrderModal(false)} initialBreakpoint={0.5} breakpoints={[0, 0.5, 0.8]}>
         <div className="p-6 bg-gray-900 text-gray-100 rounded-t-3xl border-t border-gray-800 h-full">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-white">Order Details</h2>
-            <button onClick={() => setShowOrderModal(false)} className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
+            <h2 className="text-lg font-bold text-white">{t('listEdit.orderDetails')}</h2>
+            <button onClick={() => setShowOrderModal(false)} className="p-1.5 min-touch-target rounded-full bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={closeOutline} /></button>
           </div>
           <form onSubmit={finalizeList} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Order Date</label>
-              <input type="date" required value={orderForm.orderDate} onChange={e => setOrderForm({ ...orderForm, orderDate: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" />
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('listEdit.orderDate')}</label>
+              <input type="date" required value={orderForm.orderDate} onChange={e => setOrderForm({ ...orderForm, orderDate: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Order Number (Optional)</label>
-              <input type="text" placeholder="e.g. #ORD-12345" value={orderForm.orderNumber} onChange={e => setOrderForm({ ...orderForm, orderNumber: e.target.value })} className="w-full px-4 py-3 rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" />
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('listEdit.orderNumber')}</label>
+              <input type="text" placeholder={t('listEdit.orderNumberPlaceholder')} value={orderForm.orderNumber} onChange={e => setOrderForm({ ...orderForm, orderNumber: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" />
             </div>
-            <button type="submit" className="w-full py-3.5 px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200">Confirm Order</button>
+            <button type="submit" className="w-full py-3.5 min-touch-target px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200">{t('listEdit.confirmOrder')}</button>
           </form>
         </div>
       </IonModal>
