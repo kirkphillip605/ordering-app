@@ -59,9 +59,10 @@ app.post('/api/auth/signup', async (req, res) => {
     }).returning({
       id: users.id,
       username: users.username,
+      role: users.role,
     });
 
-    const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ id: newUser.id, username: newUser.username, role: newUser.role }, JWT_SECRET, { expiresIn: '30d' });
     res.status(201).json({ token, user: newUser });
   } catch (error: any) {
     if (error.code === '23505') { // PostgreSQL unique violation code
@@ -89,15 +90,21 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid username or password' });
     }
 
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { id: user.id, username: user.username } });
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-app.get('/api/auth/me', authenticateToken, (req: any, res) => {
-  res.json({ user: req.user });
+app.get('/api/auth/me', authenticateToken, async (req: any, res) => {
+  try {
+    const [user] = await db.select({ id: users.id, username: users.username, role: users.role }).from(users).where(eq(users.id, req.user.id)).limit(1);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch user profile' });
+  }
 });
 
 // --- ADMIN USERS CRUD ---
