@@ -3,12 +3,12 @@ version: '3.8'
 services:
   db:
     image: postgres:15-alpine
-    container_name: cheflist-db
+    container_name: reorder-pro-db
     restart: always
     environment:
-      POSTGRES_USER: cheflist_user
-      POSTGRES_PASSWORD: cheflist_password
-      POSTGRES_DB: cheflist_db
+      POSTGRES_USER: reorder_user
+      POSTGRES_PASSWORD: reorder_password
+      POSTGRES_DB: reorder_db
     ports:
       - "5432:5432"
     volumes:
@@ -16,14 +16,15 @@ services:
 
   app:
     build: .
-    container_name: cheflist-app
+    container_name: reorder-pro-app
     restart: always
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=postgres://cheflist_user:cheflist_password@db:5432/cheflist_db
+      - DATABASE_URL=postgres://reorder_user:reorder_password@db:5432/reorder_db
       - PORT=3001
       - JWT_SECRET=production-secret-key-change-me
+      - FRONTEND_URL=https://orders.kirknet.io
     depends_on:
       - db
 

@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { eq, ilike, desc, sql } from 'drizzle-orm';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { eq, and, desc, sql, ilike } from 'drizzle-orm';
 import { db } from './db/index.js';
 import { 
@@ -626,6 +629,14 @@ app.delete('/api/purchase-list-items/:itemId', authenticateToken, async (req, re
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete item' });
   }
+});
+
+// Serve frontend in production
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use(express.static(path.join(__dirname, '../dist')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 app.listen(PORT, () => {

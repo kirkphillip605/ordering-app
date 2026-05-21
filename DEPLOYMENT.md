@@ -1,222 +1,97 @@
-# ChefList - Deployment & Setup Guide
+# Docker Deployment Guide for ReOrder Pro
 
-This guide provides comprehensive, step-by-step instructions for setting up, running, and deploying the **ChefList** Restaurant Purchase List PWA in both **Development** and **Production** environments using **PostgreSQL**.
+This guide outlines the steps to deploy ReOrder Pro using Docker and Docker Compose on your cloud server. The entire stack (PostgreSQL database + unified Vite/Express backend) will be spun up together, and the database schema will be automatically pushed on startup.
 
----
-
-## Table of Contents
-1. [System Architecture Overview](#1-system-architecture-overview)
-2. [Prerequisites](#2-prerequisites)
-3. [Development Environment Setup](#3-development-environment-setup)
-4. [Production Deployment (Docker Compose - Recommended)](#4-production-deployment-docker-compose---recommended)
-5. [Production Deployment (Manual / VPS / PaaS)](#5-production-deployment-manual--vps--paas)
-6. [Database Migrations & Schema Updates](#6-database-migrations--schema-updates)
-7. [Production Best Practices & Security](#7-production-best-practices--security)
-   - [SSL/HTTPS Requirement (Critical for Barcode Scanner)](#sslhttps-requirement-critical-for-barcode-scanner)
-   - [Nginx Reverse Proxy Configuration](#nginx-reverse-proxy-configuration)
+## Prerequisites
+- **Docker** and **Docker Compose** installed on your server.
+- **Nginx Proxy Manager (NPM)** installed and running (or another reverse proxy).
+- Your domain (`orders.kirknet.io`) pointing to your server's IP address.
 
 ---
 
-## 1. System Architecture Overview
-
-ChefList is built as a modern, lightweight, mobile-first Progressive Web App (PWA):
-- **Frontend**: React, Vite, Tailwind CSS, and Ionic React (for native-like UI components).
-- **Backend**: Node.js, Express, and TypeScript.
-- **Database Layer**: Drizzle ORM with **PostgreSQL** (via `pg`) for robust, production-ready data persistence.
-- **Production Delivery**: In production, the Express server serves the compiled static frontend assets (`dist/` folder) alongside the API endpoints, eliminating CORS issues and simplifying deployment to a single port.
-
----
-
-## 2. Prerequisites
-
-Ensure you have the following installed on your host machine:
-- **Node.js** (v18.x, v20.x, or v24.x LTS)
-- **npm** (v9.x or later)
-- **Docker & Docker Compose** (Required for Docker-based production deployment)
-- **PostgreSQL** (Local instance or cloud-hosted database like Supabase, Neon, or RDS)
-
----
-
-## 3. Development Environment Setup
-
-First, clone the repository and install the dependencies:
+## 1. Clone the Repository
+SSH into your server and clone the application source code:
 
 ```bash
-# Install project dependencies (no native compilation issues!)
-npm install
+git clone https://github.com/kirkphillip605/ordering-app.git reorder-pro
+cd reorder-pro
 ```
 
-### Local Setup with PostgreSQL
+## 2. Set Up Environment Variables
+We need to create the environment file that Docker Compose will use.
 
-1. **Create Database**:
-   Create a database named `cheflist` in your local PostgreSQL instance.
-
-2. **Configure Environment Variables**:
-   Create a `.env` file in the root directory:
-   ```bash
-   cp .env.example .env
-   ```
-   Open `.env` and configure your PostgreSQL connection string:
-   ```env
-   PORT=3001
-   NODE_ENV=development
-   JWT_SECRET=dev-secret-key-keep-it-safe
-   DATABASE_URL=postgres://your_user:your_password@localhost:5432/cheflist
-   ```
-
-3. **Push Database Schema**:
-   Sync your database schema with PostgreSQL:
-   ```bash
-   npm run db:push
-   ```
-
-4. **Start Development Servers**:
-   Run both the backend API server and the Vite frontend dev server concurrently:
-   ```bash
-   # Terminal 1: Start Backend API Server (runs on port 3001)
-   npm run server
-
-   # Terminal 2: Start Frontend Dev Server (runs on port 5173)
-   npm run dev
-   ```
-   Open your browser and navigate to `http://localhost:5173`.
-
----
-
-## 4. Production Deployment (Docker Compose - Recommended)
-
-Using Docker Compose is the easiest and most reliable way to deploy ChefList to production. It spins up a production-ready PostgreSQL database container and a Node.js application container automatically.
-
-1. **Configure Production Environment**:
-   Create a `.env.production` file (or configure your host environment variables):
-   ```env
-   PORT=3001
-   NODE_ENV=production
-   JWT_SECRET=CHANGE_THIS_TO_A_LONG_RANDOM_SECURE_STRING
-   DATABASE_URL=postgres://cheflist_user:cheflist_password@db:5432/cheflist_db
-   ```
-   *Note: The hostname in `DATABASE_URL` must match the database service name in `docker-compose.yml` (which is `db`).*
-
-2. **Build and Run Containers**:
-   Run the following command to build the application image and start the services in detached mode:
-   ```bash
-   docker-compose up --build -d
-   ```
-
-3. **Verify Deployment**:
-   Check the status of your containers:
-   ```bash
-   docker-compose ps
-   ```
-   The application will be accessible at `http://localhost:3001`.
-
-4. **Stop Services**:
-   To stop the containers without losing database data:
-   ```bash
-   docker-compose down
-   ```
-
----
-
-## 5. Production Deployment (Manual / VPS / PaaS)
-
-If you are deploying to a platform like Render, Heroku, Railway, or directly to a VPS without Docker:
-
-1. **Set Environment Variables**:
-   Configure the following environment variables on your hosting provider:
-   - `NODE_ENV=production`
-   - `PORT=3001`
-   - `JWT_SECRET=your-highly-secure-random-key`
-   - `DATABASE_URL=your-managed-postgres-connection-string`
-
-2. **Build the Frontend**:
-   Compile the React/Vite frontend into static assets:
-   ```bash
-   npm run build
-   ```
-   This generates a production-ready `dist/` folder in your root directory.
-
-3. **Push Database Schema**:
-   Apply the database schema to your production database:
-   ```bash
-   npm run db:push
-   ```
-
-4. **Start the Production Server**:
-   Start the Node.js server. In production mode, the Express server automatically serves the static files from the `dist/` folder:
-   ```bash
-   npm start
-   ```
-   Your application is now live on the configured `PORT`.
-
----
-
-## 6. Database Migrations & Schema Updates
-
-When you make changes to the database schema in `server/db/schema.ts`:
-
-### Generate Migration Files:
 ```bash
-npm run db:generate
+cp .env.example .env
 ```
 
-### Push Schema Changes Directly to Database:
+Open `.env` in your text editor (e.g., `nano .env`) and configure the production secrets:
+```env
+# Change this to a secure random string!
+JWT_SECRET="generate-a-long-random-string-here"
+```
+
+*(Note: `DATABASE_URL`, `FRONTEND_URL`, and `PORT` are already explicitly defined in `docker-compose.yml` so you don't strictly need them in the `.env` file unless you want to override the compose file defaults).*
+
+## 3. Build and Start the Containers
+
+Run the following command from the root of the project to build the Docker image and start the database and application containers in the background:
+
 ```bash
-npm run db:push
+docker compose up -d --build
 ```
 
-### Open Drizzle Studio (Database GUI):
+### What happens behind the scenes:
+1. Docker pulls the PostgreSQL 15 image and starts the database container (`reorder-pro-db`).
+2. Docker builds the application image (`reorder-pro-app`):
+   - It installs dependencies and builds the Vite frontend.
+   - It prunes development dependencies to keep the image lightweight.
+3. The app container starts. The start script (`npm run start`) executes `npx drizzle-kit push` to automatically create/update your database tables, then launches the Express server on port `3001`.
+4. The Express server serves both your API *and* the static frontend files.
+
+You can verify the containers are running with:
 ```bash
-npm run db:studio
+docker compose ps
 ```
 
----
-
-## 7. Production Best Practices & Security
-
-### SSL/HTTPS Requirement (Critical for Barcode Scanner)
-Modern mobile browsers **strictly block camera access** on non-secure connections. To use the barcode scanner on mobile devices, **your production deployment must be served over HTTPS**.
-
-### Nginx Reverse Proxy Configuration
-It is highly recommended to place ChefList behind a reverse proxy like Nginx or Caddy to handle SSL certificates (via Let's Encrypt).
-
-Below is a sample Nginx configuration block:
-
-```nginx
-server {
-    listen 80;
-    server_name cheflist.yourdomain.com;
-    
-    # Redirect all HTTP traffic to HTTPS
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name cheflist.yourdomain.com;
-
-    # SSL Certificates (Managed by Certbot / Let's Encrypt)
-    ssl_certificate /etc/letsencrypt/live/cheflist.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/cheflist.yourdomain.com/privkey.pem;
-
-    # Security Headers
-    add_header X-Frame-Options "SAMEORIGIN";
-    add_header X-XSS-Protection "1; mode=block";
-    add_header X-Content-Type-Options "nosniff";
-    add_header Referrer-Policy "no-referrer-when-downgrade";
-    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
-
-    # Proxy requests to the Node.js/Express App
-    location / {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+And check the application logs to ensure the database connected and the server started successfully:
+```bash
+docker compose logs -f app
 ```
+
+## 4. Configure Nginx Proxy Manager
+
+Now that the application is running and exposed on port `3001` of your host machine, you need to route external traffic to it securely.
+
+1. Log into your **Nginx Proxy Manager** web interface.
+2. Go to **Proxy Hosts** -> **Add Proxy Host**.
+3. Configure the **Details** tab:
+   - **Domain Names**: `orders.kirknet.io`
+   - **Scheme**: `http`
+   - **Forward Hostname / IP**: Enter your server's internal IP address or Docker gateway IP (usually you can use the host IP, e.g., `172.17.0.1`, or the exact local IP of the machine if NPM is running on the same server).
+   - **Forward Port**: `3001`
+   - **Block Common Exploits**: Checked
+   - **Websockets Support**: Checked
+4. Configure the **SSL** tab:
+   - **SSL Certificate**: Request a new SSL Certificate
+   - **Force SSL**: Checked
+   - **HTTP/2 Support**: Checked
+   - **Email Address**: Your email for Let's Encrypt notifications
+   - Check "I Agree to the Let's Encrypt Terms of Service"
+5. Click **Save**.
+
+## 5. Setup Your First Admin Account
+Once the site is live at `https://orders.kirknet.io`, navigate to it in your browser. 
+
+Since the database is fresh, you will need to register a new user account. Currently, the first user you create will be a `standard` user. To make them an `admin`:
+
+1. SSH into your server.
+2. Connect to the running database container:
+```bash
+docker exec -it reorder-pro-db psql -U reorder_user -d reorder_db
+```
+3. Update your user's role to admin (replace `your_username` with the username you just registered):
+```sql
+UPDATE users SET role = 'admin' WHERE username = 'your_username';
+\q
+```
+4. Refresh your browser. You will now see the **Users** tab where you can manage future accounts without needing the command line!
