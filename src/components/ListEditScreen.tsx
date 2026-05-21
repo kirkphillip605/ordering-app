@@ -8,6 +8,7 @@ import 'jspdf-autotable';
 import { Product, PurchaseList, PurchaseListItem, Unit, Vendor } from '../types';
 import { showToast } from './Toast';
 import { ConfirmDialog } from './ConfirmDialog';
+import { WebBarcodeScanner } from './WebBarcodeScanner';
 
 interface Props {
   token: string;
@@ -21,6 +22,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
   const [currentList, setCurrentList] = useState<(PurchaseList & { items: PurchaseListItem[] }) | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [showWebScanner, setShowWebScanner] = useState(false);
   const [scannedUPC, setScannedUPC] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -233,12 +235,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
   // --- SCANNER ---
   const startScanner = async () => {
     if (!Capacitor.isNativePlatform()) {
-      const mockUpc = prompt('Web fallback: Enter a barcode manually:');
-      if (mockUpc) {
-        handleUPCSearch(mockUpc);
-      } else {
-        showToast('Scanner only available on native device', 'error');
-      }
+      setShowWebScanner(true);
       return;
     }
 
@@ -562,6 +559,17 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       </IonModal>
 
       <ConfirmDialog {...confirmState} onCancel={() => setConfirmState(s => ({ ...s, isOpen: false }))} onConfirm={confirmState.action} />
+
+      <WebBarcodeScanner 
+        isOpen={showWebScanner} 
+        onScan={(decodedText) => {
+          handleUPCSearch(decodedText);
+          setShowWebScanner(false);
+        }} 
+        onCancel={() => {
+          setShowWebScanner(false);
+        }} 
+      />
     </IonContent>
   );
 }

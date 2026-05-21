@@ -7,6 +7,7 @@ import { Product, Vendor } from '../types';
 import { showToast } from './Toast';
 import { ConfirmDialog } from './ConfirmDialog';
 import { VendorSelect } from './VendorSelect';
+import { WebBarcodeScanner } from './WebBarcodeScanner';
 
 interface Props {
   token: string;
@@ -23,6 +24,8 @@ export function ProductsTab({ token, products, vendors, fetchProducts, fetchVend
   });
   const [search, setSearch] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [showWebScanner, setShowWebScanner] = useState(false);
+  const [activeScanIndex, setActiveScanIndex] = useState<number | null>(null);
 
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean; action: () => void; title: string; message: string }>({
     isOpen: false, action: () => {}, title: '', message: ''
@@ -74,15 +77,8 @@ export function ProductsTab({ token, products, vendors, fetchProducts, fetchVend
 
   const startScanner = async (index: number) => {
     if (!Capacitor.isNativePlatform()) {
-      // Fallback for web testing (mock scan)
-      const mockUpc = prompt('Web fallback: Enter a barcode manually:');
-      if (mockUpc) {
-        const newUpcs = [...form.upcs];
-        newUpcs[index] = mockUpc;
-        setForm({ ...form, upcs: newUpcs });
-      } else {
-        showToast('Scanner only available on native device', 'error');
-      }
+      setActiveScanIndex(index);
+      setShowWebScanner(true);
       return;
     }
 
@@ -234,6 +230,23 @@ export function ProductsTab({ token, products, vendors, fetchProducts, fetchVend
       </IonModal>
 
       <ConfirmDialog {...confirmState} onCancel={() => setConfirmState(s => ({ ...s, isOpen: false }))} onConfirm={confirmState.action} variant="danger" />
+
+      <WebBarcodeScanner 
+        isOpen={showWebScanner} 
+        onScan={(decodedText) => {
+          if (activeScanIndex !== null) {
+            const newUpcs = [...form.upcs];
+            newUpcs[activeScanIndex] = decodedText;
+            setForm({ ...form, upcs: newUpcs });
+          }
+          setShowWebScanner(false);
+          setActiveScanIndex(null);
+        }} 
+        onCancel={() => {
+          setShowWebScanner(false);
+          setActiveScanIndex(null);
+        }} 
+      />
     </div>
   );
 }
