@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: cheflist-db
+    restart: always
+    environment:
+      POSTGRES_USER: cheflist_user
+      POSTGRES_PASSWORD: cheflist_password
+      POSTGRES_DB: cheflist_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: cheflist-app
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgres://cheflist_user:cheflist_password@db:5432/cheflist_db
+      - PORT=3001
+      - JWT_SECRET=production-secret-key-change-me
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
