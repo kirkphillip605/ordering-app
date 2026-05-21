@@ -290,8 +290,8 @@ app.get('/api/products', authenticateToken, async (req, res) => {
       description: products.description,
       createdAt: products.createdAt,
       updatedAt: products.updatedAt,
-      upc: sql<string>`(SELECT string_agg(upc, ',') FROM ${productUpcs} WHERE ${productUpcs.productId} = ${products.id})`,
-      vendor_name: sql<string>`(SELECT string_agg(${vendors.name}, ', ') FROM ${productVendors} JOIN ${vendors} ON ${productVendors.vendorId} = ${vendors.id} WHERE ${productVendors.productId} = ${products.id})`
+      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`
     }).from(products).orderBy(products.name);
     res.json(list);
   } catch (error) {
@@ -309,8 +309,8 @@ app.get('/api/products/search', authenticateToken, async (req, res) => {
       id: products.id,
       name: products.name,
       description: products.description,
-      upc: sql<string>`(SELECT string_agg(upc, ',') FROM ${productUpcs} WHERE ${productUpcs.productId} = ${products.id})`,
-      vendor_name: sql<string>`(SELECT string_agg(${vendors.name}, ', ') FROM ${productVendors} JOIN ${vendors} ON ${productVendors.vendorId} = ${vendors.id} WHERE ${productVendors.productId} = ${products.id})`
+      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`
     })
       .from(products)
       .where(ilike(products.name, `%${q}%`))
@@ -332,8 +332,8 @@ app.get('/api/products/upc/:upc', authenticateToken, async (req, res) => {
       id: products.id,
       name: products.name,
       description: products.description,
-      upc: sql<string>`(SELECT string_agg(upc, ',') FROM ${productUpcs} WHERE ${productUpcs.productId} = ${products.id})`,
-      vendor_name: sql<string>`(SELECT string_agg(${vendors.name}, ', ') FROM ${productVendors} JOIN ${vendors} ON ${productVendors.vendorId} = ${vendors.id} WHERE ${productVendors.productId} = ${products.id})`
+      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`
     }).from(products).where(eq(products.id, upcRecord[0].productId)).limit(1);
 
     if (!product) return res.status(404).json({ error: 'Product not found' });
@@ -424,8 +424,8 @@ app.patch('/api/products/:id/upc', authenticateToken, async (req, res) => {
       id: products.id,
       name: products.name,
       description: products.description,
-      upc: sql<string>`(SELECT string_agg(upc, ',') FROM ${productUpcs} WHERE ${productUpcs.productId} = ${products.id})`,
-      vendor_name: sql<string>`(SELECT string_agg(${vendors.name}, ', ') FROM ${productVendors} JOIN ${vendors} ON ${productVendors.vendorId} = ${vendors.id} WHERE ${productVendors.productId} = ${products.id})`
+      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`
     }).from(products).where(eq(products.id, id)).limit(1);
 
     res.json(full);
@@ -457,7 +457,7 @@ app.get('/api/purchase-lists', authenticateToken, async (req, res) => {
       isArchived: purchaseLists.isArchived,
       createdAt: purchaseLists.createdAt,
       updatedAt: purchaseLists.updatedAt,
-      itemCount: sql<number>`CAST((SELECT COUNT(*) FROM ${purchaseListItems} WHERE ${purchaseListItems.purchaseListId} = ${purchaseLists.id}) AS INTEGER)`
+      itemCount: sql<number>`CAST((SELECT COUNT(*) FROM "purchase_list_items" WHERE "purchase_list_items"."purchase_list_id" = "purchase_lists"."id") AS INTEGER)`
     })
     .from(purchaseLists)
     .orderBy(desc(purchaseLists.createdAt));
@@ -484,8 +484,8 @@ app.get('/api/purchase-lists/:id', authenticateToken, async (req, res) => {
       createdAt: purchaseListItems.createdAt,
       updatedAt: purchaseListItems.updatedAt,
       product_name: products.name,
-      product_upc: sql<string>`(SELECT string_agg(upc, ',') FROM ${productUpcs} WHERE ${productUpcs.productId} = ${products.id})`,
-      vendor_name: sql<string>`(SELECT string_agg(${vendors.name}, ', ') FROM ${productVendors} JOIN ${vendors} ON ${productVendors.vendorId} = ${vendors.id} WHERE ${productVendors.productId} = ${products.id})`,
+      product_upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
       unit_name: units.name,
       unit_abbreviation: units.abbreviation,
     })
