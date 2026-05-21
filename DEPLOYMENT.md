@@ -67,7 +67,7 @@ Now that the application is running and exposed on port `3001` of your host mach
 3. Configure the **Details** tab:
    - **Domain Names**: `orders.kirknet.io`
    - **Scheme**: `http`
-   - **Forward Hostname / IP**: Enter your server's internal IP address or Docker gateway IP (usually you can use the host IP, e.g., `172.17.0.1`, or the exact local IP of the machine if NPM is running on the same server).
+   - **Forward Hostname / IP**: Enter your server's public IP address (e.g., `157.230.238.68`). Do not use `localhost` or `127.0.0.1` as that will route to the NPM container itself. Using the public IP ensures NPM can reach the published port 3001 on the host machine.
    - **Forward Port**: `3001`
    - **Block Common Exploits**: Checked
    - **Websockets Support**: Checked
