@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { eq, and, desc, sql, ilike, inArray, ne } from 'drizzle-orm';
+import { eq, and, desc, sql, ilike, inArray, ne, isNull } from 'drizzle-orm';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { db } from './db/index.js';
@@ -12,6 +12,7 @@ import {
   units, 
   products, 
   productUpcs,
+  productVariants,
   productVendors,
   purchaseLists, 
   purchaseListItems 
@@ -292,25 +293,27 @@ app.get('/api/products', authenticateToken, async (req, res) => {
   const vendorId = req.query.vendorId as string | undefined;
 
   try {
-    let query = db.select({
+    const list = await db.select({
       id: products.id,
       name: products.name,
       description: products.description,
+      brand: products.brand,
+      category: products.category,
+      isFrequentlyOrdered: products.isFrequentlyOrdered,
       createdAt: products.createdAt,
       updatedAt: products.updatedAt,
-      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id" AND "product_upcs"."variant_id" IS NULL)`,
+      variants: sql<string>`(SELECT json_agg(json_build_object('id', "product_variants"."id", 'name', "product_variants"."name", 'upcs', (SELECT array_remove(array_agg("product_upcs"."upc"), NULL) FROM "product_upcs" WHERE "product_upcs"."variant_id" = "product_variants"."id"))) FROM "product_variants" WHERE "product_variants"."product_id" = "products"."id")`,
       vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
       vendorIds: sql<string>`(SELECT string_agg("product_vendors"."vendor_id"::text, ',') FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id")`
-    }).from(products);
-
-    if (vendorId) {
-      query = query.where(sql`EXISTS (SELECT 1 FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id" AND "product_vendors"."vendor_id" = ${vendorId})`);
-    }
-
-    const list = await query.orderBy(products.name);
+    })
+    .from(products)
+    .where(vendorId ? sql`EXISTS (SELECT 1 FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id" AND "product_vendors"."vendor_id" = ${vendorId})` : undefined)
+    .orderBy(desc(products.isFrequentlyOrdered), products.name);
     const formattedList = list.map(p => ({
       ...p,
-      vendorIds: p.vendorIds ? p.vendorIds.split(',') : []
+      vendorIds: p.vendorIds ? p.vendorIds.split(',') : [],
+      variants: p.variants ? (typeof p.variants === 'string' ? JSON.parse(p.variants) : p.variants).map((v: any) => ({ ...v, upcs: v.upcs || [] })) : []
     }));
     res.json(formattedList);
   } catch (error) {
@@ -328,17 +331,22 @@ app.get('/api/products/search', authenticateToken, async (req, res) => {
       id: products.id,
       name: products.name,
       description: products.description,
-      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      brand: products.brand,
+      category: products.category,
+      isFrequentlyOrdered: products.isFrequentlyOrdered,
+      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id" AND "product_upcs"."variant_id" IS NULL)`,
+      variants: sql<string>`(SELECT json_agg(json_build_object('id', "product_variants"."id", 'name', "product_variants"."name", 'upcs', (SELECT array_remove(array_agg("product_upcs"."upc"), NULL) FROM "product_upcs" WHERE "product_upcs"."variant_id" = "product_variants"."id"))) FROM "product_variants" WHERE "product_variants"."product_id" = "products"."id")`,
       vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
       vendorIds: sql<string>`(SELECT string_agg("product_vendors"."vendor_id"::text, ',') FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id")`
     })
       .from(products)
       .where(ilike(products.name, `%${q}%`))
-      .orderBy(products.name)
+      .orderBy(desc(products.isFrequentlyOrdered), products.name)
       .limit(20);
     const formattedResults = results.map(p => ({
       ...p,
-      vendorIds: p.vendorIds ? p.vendorIds.split(',') : []
+      vendorIds: p.vendorIds ? p.vendorIds.split(',') : [],
+      variants: p.variants ? (typeof p.variants === 'string' ? JSON.parse(p.variants) : p.variants).map((v: any) => ({ ...v, upcs: v.upcs || [] })) : []
     }));
     res.json(formattedResults);
   } catch (error) {
@@ -356,29 +364,43 @@ app.get('/api/products/upc/:upc', authenticateToken, async (req, res) => {
       id: products.id,
       name: products.name,
       description: products.description,
-      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      brand: products.brand,
+      category: products.category,
+      isFrequentlyOrdered: products.isFrequentlyOrdered,
+      upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id" AND "product_upcs"."variant_id" IS NULL)`,
+      variants: sql<string>`(SELECT json_agg(json_build_object('id', "product_variants"."id", 'name', "product_variants"."name", 'upcs', (SELECT array_remove(array_agg("product_upcs"."upc"), NULL) FROM "product_upcs" WHERE "product_upcs"."variant_id" = "product_variants"."id"))) FROM "product_variants" WHERE "product_variants"."product_id" = "products"."id")`,
       vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
       vendorIds: sql<string>`(SELECT string_agg("product_vendors"."vendor_id"::text, ',') FROM "product_vendors" WHERE "product_vendors"."product_id" = "products"."id")`
     }).from(products).where(eq(products.id, upcRecord[0].productId)).limit(1);
 
     if (!product) return res.status(404).json({ error: 'Product not found' });
-    res.json({ ...product, vendorIds: product.vendorIds ? product.vendorIds.split(',') : [] });
+    res.json({ 
+      ...product, 
+      vendorIds: product.vendorIds ? product.vendorIds.split(',') : [],
+      variants: product.variants ? (typeof product.variants === 'string' ? JSON.parse(product.variants) : product.variants).map((v: any) => ({ ...v, upcs: v.upcs || [] })) : []
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to query product by UPC' });
   }
 });
 
 app.post('/api/products', authenticateToken, async (req, res) => {
-  const { name, description, upcs, vendorIds } = req.body;
+  const { name, description, brand, category, isFrequentlyOrdered, upcs, variants, vendorIds } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
   const validUpcs = (upcs || []).filter((u: string) => u.trim() !== '');
+  let allUpcsToCheck = [...validUpcs];
+  if (variants) {
+    variants.forEach((v: any) => {
+      allUpcsToCheck = allUpcsToCheck.concat((v.upcs || []).filter((u: string) => u.trim() !== ''));
+    });
+  }
 
   try {
-    if (validUpcs.length > 0) {
+    if (allUpcsToCheck.length > 0) {
       const [existing] = await db.select({ upc: productUpcs.upc, productId: productUpcs.productId })
         .from(productUpcs)
-        .where(inArray(productUpcs.upc, validUpcs))
+        .where(inArray(productUpcs.upc, allUpcsToCheck))
         .limit(1);
       if (existing) {
         const [conflictProduct] = await db.select().from(products).where(eq(products.id, existing.productId)).limit(1);
@@ -389,11 +411,30 @@ app.post('/api/products', authenticateToken, async (req, res) => {
     const [newProduct] = await db.insert(products).values({
       name,
       description: description || '',
+      brand: brand || null,
+      category: category || 'Other',
+      isFrequentlyOrdered: isFrequentlyOrdered || false
     }).returning();
 
     for (const upc of validUpcs) {
       await db.insert(productUpcs).values({ productId: newProduct.id, upc });
     }
+
+    if (variants && variants.length > 0) {
+      for (const variant of variants) {
+        if (!variant.name.trim()) continue;
+        const [newVariant] = await db.insert(productVariants).values({
+          productId: newProduct.id,
+          name: variant.name.trim()
+        }).returning();
+
+        const vUpcs = (variant.upcs || []).filter((u: string) => u.trim() !== '');
+        for (const upc of vUpcs) {
+          await db.insert(productUpcs).values({ productId: newProduct.id, variantId: newVariant.id, upc });
+        }
+      }
+    }
+
     if (vendorIds && vendorIds.length > 0) {
       for (const vendorId of vendorIds) {
         await db.insert(productVendors).values({ productId: newProduct.id, vendorId });
@@ -407,18 +448,24 @@ app.post('/api/products', authenticateToken, async (req, res) => {
 });
 
 app.put('/api/products/:id', authenticateToken, async (req, res) => {
-  const { name, description, upcs, vendorIds } = req.body;
+  const { name, description, brand, category, isFrequentlyOrdered, upcs, variants, vendorIds } = req.body;
   const { id } = req.params;
 
   const validUpcs = (upcs || []).filter((u: string) => u.trim() !== '');
+  let allUpcsToCheck = [...validUpcs];
+  if (variants) {
+    variants.forEach((v: any) => {
+      allUpcsToCheck = allUpcsToCheck.concat((v.upcs || []).filter((u: string) => u.trim() !== ''));
+    });
+  }
 
   try {
-    if (validUpcs.length > 0) {
+    if (allUpcsToCheck.length > 0) {
       const [existing] = await db.select({ upc: productUpcs.upc, productId: productUpcs.productId })
         .from(productUpcs)
         .where(
            and(
-             inArray(productUpcs.upc, validUpcs),
+             inArray(productUpcs.upc, allUpcsToCheck),
              ne(productUpcs.productId, id)
            )
         )
@@ -430,17 +477,44 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
     }
 
     const [updatedProduct] = await db.update(products)
-      .set({ name, description: description || '', updatedAt: new Date() })
+      .set({ 
+        name, 
+        description: description || '', 
+        brand: brand || null,
+        category: category || 'Other',
+        isFrequentlyOrdered: isFrequentlyOrdered || false,
+        updatedAt: new Date() 
+      })
       .where(eq(products.id, id))
       .returning();
     if (!updatedProduct) return res.status(404).json({ error: 'Product not found' });
 
-    if (upcs !== undefined) {
+    if (upcs !== undefined || variants !== undefined) {
       await db.delete(productUpcs).where(eq(productUpcs.productId, id));
+    }
+    
+    if (upcs !== undefined) {
       for (const upc of validUpcs) {
         await db.insert(productUpcs).values({ productId: id, upc });
       }
     }
+
+    if (variants !== undefined) {
+      await db.delete(productVariants).where(eq(productVariants.productId, id));
+      for (const variant of variants) {
+        if (!variant.name.trim()) continue;
+        const [newVariant] = await db.insert(productVariants).values({
+          productId: id,
+          name: variant.name.trim()
+        }).returning();
+
+        const vUpcs = (variant.upcs || []).filter((u: string) => u.trim() !== '');
+        for (const upc of vUpcs) {
+          await db.insert(productUpcs).values({ productId: id, variantId: newVariant.id, upc });
+        }
+      }
+    }
+
     if (vendorIds !== undefined) {
       await db.delete(productVendors).where(eq(productVendors.productId, id));
       for (const vendorId of vendorIds) {
@@ -536,7 +610,9 @@ app.get('/api/purchase-lists/:id', authenticateToken, async (req, res) => {
       createdAt: purchaseListItems.createdAt,
       updatedAt: purchaseListItems.updatedAt,
       product_name: products.name,
-      product_upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id")`,
+      product_upc: sql<string>`(SELECT string_agg("product_upcs"."upc", ',') FROM "product_upcs" WHERE "product_upcs"."product_id" = "products"."id" AND ("product_upcs"."variant_id" = "purchase_list_items"."variant_id" OR "purchase_list_items"."variant_id" IS NULL AND "product_upcs"."variant_id" IS NULL))`,
+      variant_name: productVariants.name,
+      variantId: purchaseListItems.variantId,
       vendor_name: sql<string>`(SELECT string_agg("vendors"."name", ', ') FROM "product_vendors" JOIN "vendors" ON "product_vendors"."vendor_id" = "vendors"."id" WHERE "product_vendors"."product_id" = "products"."id")`,
       unit_name: units.name,
       unit_abbreviation: units.abbreviation,
@@ -544,6 +620,7 @@ app.get('/api/purchase-lists/:id', authenticateToken, async (req, res) => {
     .from(purchaseListItems)
     .innerJoin(products, eq(purchaseListItems.productId, products.id))
     .innerJoin(units, eq(purchaseListItems.unitId, units.id))
+    .leftJoin(productVariants, eq(purchaseListItems.variantId, productVariants.id))
     .where(eq(purchaseListItems.purchaseListId, id));
 
     res.json({ ...list, items });
@@ -606,7 +683,7 @@ app.delete('/api/purchase-lists/:id', authenticateToken, async (req, res) => {
 // --- PURCHASE LIST ITEMS ---
 app.post('/api/purchase-lists/:id/items', authenticateToken, async (req, res) => {
   const { id: purchaseListId } = req.params;
-  const { productId, quantity, unitId } = req.body;
+  const { productId, quantity, unitId, variantId } = req.body;
 
   if (!productId || quantity === undefined || !unitId) {
     return res.status(400).json({ error: 'Product, quantity, and unit are required' });
@@ -619,7 +696,8 @@ app.post('/api/purchase-lists/:id/items', authenticateToken, async (req, res) =>
       .where(
         and(
           eq(purchaseListItems.purchaseListId, purchaseListId),
-          eq(purchaseListItems.productId, productId)
+          eq(purchaseListItems.productId, productId),
+          variantId ? eq(purchaseListItems.variantId, variantId) : isNull(purchaseListItems.variantId)
         )
       )
       .limit(1);
@@ -640,6 +718,7 @@ app.post('/api/purchase-lists/:id/items', authenticateToken, async (req, res) =>
       const [newItem] = await db.insert(purchaseListItems).values({
         purchaseListId,
         productId,
+        variantId: variantId || null,
         quantity: quantity.toString(),
         unitId,
       }).returning();
@@ -653,13 +732,14 @@ app.post('/api/purchase-lists/:id/items', authenticateToken, async (req, res) =>
 
 app.put('/api/purchase-list-items/:itemId', authenticateToken, async (req, res) => {
   const { itemId } = req.params;
-  const { quantity, unitId } = req.body;
+  const { quantity, unitId, variantId } = req.body;
 
   try {
     const [updatedItem] = await db.update(purchaseListItems)
       .set({ 
         quantity: quantity.toString(), 
         unitId,
+        variantId: variantId !== undefined ? (variantId || null) : undefined,
         updatedAt: new Date()
       })
       .where(eq(purchaseListItems.id, itemId))

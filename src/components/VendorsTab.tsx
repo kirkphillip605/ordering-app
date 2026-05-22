@@ -4,6 +4,8 @@ import { addOutline, createOutline, trashOutline, businessOutline, closeOutline 
 import { Vendor } from '../types';
 import { showToast } from './Toast';
 import { ConfirmDialog } from './ConfirmDialog';
+import { VendorDetailScreen } from './VendorDetailScreen';
+import { ProductDetailScreen } from './ProductDetailScreen';
 import { useTranslation } from '../i18n';
 
 interface Props { token: string; vendors: Vendor[]; fetchVendors: () => void; }
@@ -12,6 +14,8 @@ export function VendorsTab({ token, vendors, fetchVendors }: Props) {
   const { t } = useTranslation();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ id: '', name: '', description: '' });
+  const [activeVendorId, setActiveVendorId] = useState<string | null>(null);
+  const [activeProductId, setActiveProductId] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean; action: () => void; title: string; message: string }>({
     isOpen: false, action: () => {}, title: '', message: ''
   });
@@ -58,9 +62,9 @@ export function VendorsTab({ token, vendors, fetchVendors }: Props) {
         <div className="space-y-3">
           {vendors.map(vendor => (
             <div key={vendor.id} className="glass-panel rounded-2xl p-4 border border-gray-800/60 shadow-sm flex justify-between items-center">
-              <div>
+              <div className="flex-1 cursor-pointer pr-4" onClick={() => setActiveVendorId(vendor.id)}>
                 <h3 className="font-bold text-white text-sm">{vendor.name}</h3>
-                <p className="text-xs text-gray-400 mt-0.5">{vendor.description}</p>
+                <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{vendor.description}</p>
               </div>
               <div className="flex gap-1">
                 <button onClick={() => { setForm({ ...vendor, description: vendor.description||'' }); setShowModal(true); }} className="p-2 min-touch-target rounded-xl hover:bg-gray-800 text-gray-400 hover:text-white transition-all-200"><IonIcon icon={createOutline} /></button>
@@ -92,6 +96,27 @@ export function VendorsTab({ token, vendors, fetchVendors }: Props) {
       </IonModal>
 
       <ConfirmDialog {...confirmState} onCancel={() => setConfirmState(s => ({ ...s, isOpen: false }))} onConfirm={confirmState.action} variant="danger" />
+
+      <IonModal isOpen={activeVendorId !== null} onDidDismiss={() => setActiveVendorId(null)}>
+        {activeVendorId && (
+          <VendorDetailScreen 
+            token={token} 
+            vendorId={activeVendorId} 
+            onClose={() => setActiveVendorId(null)} 
+            onProductClick={(p) => setActiveProductId(p.id)}
+          />
+        )}
+      </IonModal>
+
+      <IonModal isOpen={activeProductId !== null} onDidDismiss={() => setActiveProductId(null)}>
+        {activeProductId && (
+          <ProductDetailScreen 
+            token={token} 
+            productId={activeProductId} 
+            onClose={() => setActiveProductId(null)} 
+          />
+        )}
+      </IonModal>
     </div>
   );
 }

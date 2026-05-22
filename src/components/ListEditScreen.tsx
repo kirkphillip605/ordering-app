@@ -32,7 +32,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
   // Modals
   const [showQuantityModal, setShowQuantityModal] = useState(false);
   const [selectedProductForAdd, setSelectedProductForAdd] = useState<Product | null>(null);
-  const [addItemForm, setAddItemForm] = useState({ quantity: '1', unitId: '' });
+  const [addItemForm, setAddItemForm] = useState({ quantity: '1', unitId: '', variantId: '' });
   
   const [showProductNotFoundModal, setShowProductNotFoundModal] = useState(false);
   const [quickProductMode, setQuickProductMode] = useState<'create' | 'link'>('create');
@@ -63,7 +63,11 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
           p.name.toLowerCase().includes(lowerQ) ||
           (p.upc && p.upc.includes(searchQuery)) ||
           (p.vendor_name && p.vendor_name.toLowerCase().includes(lowerQ))
-        ));
+        ).sort((a, b) => {
+          if (a.isFrequentlyOrdered && !b.isFrequentlyOrdered) return -1;
+          if (!a.isFrequentlyOrdered && b.isFrequentlyOrdered) return 1;
+          return a.name.localeCompare(b.name);
+        }));
       }
     } else {
       setFilteredProducts([]);
@@ -173,6 +177,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
     if (res.ok) {
       const product = await res.json();
       setSearchQuery('');
+      setScannedUPC(upc);
       handleProductClick(product);
     } else {
       setScannedUPC(upc);
@@ -184,10 +189,21 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
 
   const handleProductClick = (product: Product, existingItem?: PurchaseListItem) => {
     setSelectedProductForAdd(product);
+    
+    let autoVariantId = '';
+    if (scannedUPC && product.variants?.length) {
+      const match = product.variants.find(v => v.upcs?.includes(scannedUPC));
+      if (match) autoVariantId = match.id || '';
+    } else if (!existingItem && product.variants?.length === 1) {
+      autoVariantId = product.variants[0].id || '';
+    }
+
     setAddItemForm({
       quantity: existingItem ? String(existingItem.quantity) : '1',
-      unitId: existingItem ? existingItem.unitId : (units[0]?.id || '')
+      unitId: existingItem ? existingItem.unitId : (units[0]?.id || ''),
+      variantId: existingItem?.variantId || autoVariantId
     });
+    setScannedUPC('');
     setShowQuantityModal(true);
   };
 
@@ -201,7 +217,8 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
       body: JSON.stringify({
         productId: selectedProductForAdd.id,
         quantity: parseFloat(addItemForm.quantity),
-        unitId: addItemForm.unitId
+        unitId: addItemForm.unitId,
+        variantId: addItemForm.variantId || null
       })
     });
 
@@ -450,7 +467,13 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
                 return (
                   <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-900/30 transition-all-200 cursor-pointer" onClick={() => { if(currentList.status === 'draft' && product) handleProductClick(product, item); }}>
                     <div>
-                      <h3 className="font-semibold text-gray-200 text-sm">{item.product_name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-200 text-sm">{item.product_name}</h3>
+                        {product?.isFrequentlyOrdered && <IonIcon icon={cubeOutline} className="text-yellow-500 text-xs" />}
+                      </div>
+                      {item.variantId && product?.variants && (
+                        <p className="text-xs text-blue-400 mt-0.5">Variant: {product.variants.find(v => v.id === item.variantId)?.name || 'Unknown'}</p>
+                      )}
                       <p className="text-xs text-gray-500 mt-0.5">UPC: {item.product_upc}</p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -477,10 +500,27 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
           {selectedProductForAdd && (
             <div className="mb-6 p-4 rounded-2xl bg-gray-950 border border-gray-800">
               <h3 className="font-bold text-white text-sm">{selectedProductForAdd.name}</h3>
-              <p className="text-[10px] font-mono text-gray-500 mt-2">UPC: {selectedProductForAdd.upc}</p>
+              <p className="text-[10px] font-mono text-gray-500 mt-2">UPC: {selectedProductForAdd.upc || t('products.noUpc')}</p>
             </div>
           )}
           <form onSubmit={submitAddItem} className="space-y-5">
+            {selectedProductForAdd && selectedProductForAdd.variants && selectedProductForAdd.variants.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('products.variants')}</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {selectedProductForAdd.variants.map(v => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setAddItemForm({ ...addItemForm, variantId: v.id || '' })}
+                      className={`p-3 rounded-xl border text-left min-touch-target transition-all-200 ${addItemForm.variantId === v.id ? 'bg-teal-500/20 border-teal-500 text-teal-300' : 'bg-gray-950 border-gray-800 text-gray-400 hover:border-gray-700 hover:text-gray-200'}`}
+                    >
+                      <div className="font-semibold text-sm">{v.name}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('listEdit.quantity')}</label>
               <input type="number" step="any" required value={addItemForm.quantity} onChange={e => setAddItemForm({ ...addItemForm, quantity: e.target.value })} className="w-full px-4 min-touch-target rounded-xl bg-gray-950 border border-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 transition-all-200" autoFocus />
@@ -491,7 +531,7 @@ export function ListEditScreen({ token, listId, vendors, units, onClose }: Props
                 {units.map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}
               </select>
             </div>
-            <button type="submit" className="w-full py-3.5 min-touch-target px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200">{t('listEdit.saveItem')}</button>
+            <button type="submit" disabled={selectedProductForAdd?.variants?.length ? !addItemForm.variantId : false} className="w-full py-3.5 min-touch-target px-4 rounded-xl bg-teal-500 hover:bg-teal-600 text-gray-950 font-bold shadow-lg shadow-teal-500/10 transition duration-200 disabled:opacity-50">{t('listEdit.saveItem')}</button>
           </form>
         </div>
       </IonModal>
